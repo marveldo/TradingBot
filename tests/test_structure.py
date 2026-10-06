@@ -29,7 +29,9 @@ THE RULES (from PLAN.md → Definitions). A wick is always enough.
                      (no break reported for this — it's just the starting point)
 
     In a BULLISH trend:
-      bos_level   = the high of the latest BULLISH swing (ignore bearish swings while bullish)
+      bos_level   = the high of the FIRST bullish swing after the last break (ignore bearish swings while bullish).
+                    Once set, it STAYS until price breaks it — a later swing with a lower high does NOT move it
+                    (a lower high isn't a valid level to target).
       BOS         = a candle's HIGH goes above bos_level
                     → report BOS, the candle before it is the OB, choch_level = that OB candle's LOW,
                       bos_level = None until the next bullish swing gives a new high to break
@@ -37,8 +39,8 @@ THE RULES (from PLAN.md → Definitions). A wick is always enough.
                     → report CHoCH, trend = bearish, choch_level = the HIGH of the candle before it,
                       bos_level = None until the next bearish swing gives a new low to break
 
-    In a BEARISH trend: exact mirror (BOS = low below the latest bearish swing's low,
-                        CHoCH = high above choch_level).
+    In a BEARISH trend: exact mirror (BOS = low below the first bearish swing's low after the last break,
+                        which stays until broken; CHoCH = high above choch_level).
 
     Order inside update(): first feed the SwingDetector and take in any new swing, THEN check for breaks.
     So the candle that confirms a swing can also break that swing's level straight away.
@@ -113,6 +115,26 @@ def test_bullish_bos_when_a_wick_goes_above_the_last_swing_high():
     assert b.time == hour(4) and b.ob_time == hour(3)
     assert structure.trend == "bullish"
     assert structure.choch_level == 11.9
+
+
+def test_a_lower_high_swing_does_not_move_the_bos_level():
+    # BOS level is 14. Price makes a LOWER high (13.8), pulls back, continues → a new bullish swing with high 13.8.
+    # That lower high is NOT a valid level: the BOS level stays 14.
+    # So 13.9 is not a BOS; only a wick above 14 is.
+    structure, returned = run(candles(
+        *FIRST_SWING,                   # 0-3: swing (high 14, low 11.5) → bos_level 14; candle 3's high is 13.8
+        (13.2, 13.6, 12.9, 13.5),       # 4 green, stays under 14
+        (13.5, 13.55, 12.5, 12.6),      # 5 red pullback (high 13.55, low 12.5) — above the CHoCH level 11.5
+        (12.6, 13.7, 12.55, 13.6),      # 6 wick 13.7 > 13.55 → new bullish swing with the LOWER high 13.8
+        (13.6, 13.9, 13.5, 13.85),      # 7 wick 13.9: above 13.8 but below 14 → no BOS
+        (13.85, 14.2, 13.8, 14.1),      # 8 wick 14.2 > 14 → BOS of the REAL high
+    ))
+    assert structure.bos_level is None          # used up by the BOS on candle 8
+    assert returned[6] == [] and returned[7] == []
+    assert len(returned[8]) == 1
+    b = returned[8][0]
+    assert (b.kind, b.direction, b.level) == ("BOS", "bullish", 14)
+    assert b.ob_time == hour(7)
 
 
 def test_no_second_bos_until_a_new_swing_high_exists():

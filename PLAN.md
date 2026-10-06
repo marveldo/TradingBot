@@ -54,9 +54,15 @@ Rules are expected to get tweaked during Stage 2.
 - **"Goes past the pullback" (default):** a wick above the pullback candle's high (bearish: below its low) — from the "green candle shoots past that red" example. ❓ confirm, or is it past the top of the move before the pullback?
 - **Pullback (default):** one or more opposite-colour candles (red in an up move, green in a down move). ❓ confirm, or does a same-colour candle making a lower low also count?
 - ❓ **OB candle colour:** must it be the opposite colour (bearish candle for a buy OB), or any candle before the BOS candle?
-- ❓ **OB zone:** full candle range (wicks included) or body only?
-- ❓ **OB life:** dead after the first tap, or can it be used again?
+- **OB zone (v1 default):** the OB candle's full range, wicks included. Tests: `tests/test_order_blocks.py`.
+  OB status: pending → valid (pullback + continuation, inducement set) → swept → tapped; any time → invalid (wick through the far side of the OB).
+  Also invalid: the pullback after the BOS already comes back into the OB before an inducement forms. Tap without a sweep doesn't count.
+  Real EURUSD H4 (2019–2026): ~1186 OBs, ~207 reach tapped (~27 setups/yr on one TF).
+- ❓ **OB life:** dead after the first tap, or can it be used again? (v1: after the tap it only changes again if it breaks → invalid)
+- ❓ **Do CHoCH breaks create OBs too?** (v1: only BOS does — your 7-step pattern says BOS. The reversal OB after a CHoCH matters for the flip logic later.)
+- ❓ **OB break by wick or close?** (v1: wick. A close-only break gave a few more setups on H4 — test it in the backtest.)
 - **BOS (trend continues):** bullish = the new swing's high goes above the previous swing's high. Bearish = the new swing's low goes below the previous swing's low.
+  The level to break is set by the FIRST swing after the last break and stays until broken — a later lower high (bullish) / higher low (bearish) doesn't move it. (answered 2026-10-05)
 - **CHoCH (trend changes):** bullish trend, but price breaks a swing **low** instead → CHoCH (now bearish). Bearish trend, but price breaks a swing **high** → CHoCH (now bullish).
 - **CHoCH level = the low at the OB** (the low the move started from), NOT the inducement low. Bullish: price sweeping the inducement is just the sweep; price breaking below the OB low → CHoCH (bearish). Bearish: mirror (break above the OB high). (answered 2026-10-04)
 - **Swings/structure per TF:** each TF's swings, BOS, OBs come only from that TF's own candles (one H4 swing contains many M15 swings).

@@ -16,7 +16,7 @@ THE INTERFACE these tests expect (you write it in core/detectors.py):
         direction   the trend AFTER the break ("bullish" or "bearish")
         level       the price that got broken
         time        time of the candle that broke it   (the "BOS candle")
-        ob_time     time of the candle just BEFORE it  (the OB candle, from your OB definition)
+    (Which candle is the OB is the OrderBlockDetector's job, not this one's.)
 
     StructureDetector uses your SwingDetector inside it: every candle goes to the SwingDetector first.
 
@@ -33,11 +33,14 @@ THE RULES (from PLAN.md → Definitions). A wick is always enough.
                     Once set, it STAYS until price breaks it — a later swing with a lower high does NOT move it
                     (a lower high isn't a valid level to target).
       BOS         = a candle's HIGH goes above bos_level
-                    → report BOS, the candle before it is the OB, choch_level = that OB candle's LOW,
+                    → report BOS, choch_level = the SWING LOW the move started from
+                      (= the lowest low between the broken swing high and the BOS candle, BOS candle included),
                       bos_level = None until the next bullish swing gives a new high to break
-      CHoCH       = a candle's LOW goes below choch_level (the low at the OB — NOT the inducement)
-                    → report CHoCH, trend = bearish, choch_level = the HIGH of the candle before it,
+      CHoCH       = a candle's LOW goes below choch_level (the swing low — NOT the inducement)
+                    → report CHoCH, trend = bearish, choch_level = the SWING HIGH the drop started from
+                      (= the highest high since choch_level was set, CHoCH candle included),
                       bos_level = None until the next bearish swing gives a new low to break
+    Levels only ever come from swing highs/lows — never from candle colours.
 
     In a BEARISH trend: exact mirror (BOS = low below the first bearish swing's low after the last break,
                         which stays until broken; CHoCH = high above choch_level).
@@ -80,7 +83,7 @@ FIRST_SWING = [
     (13, 13.5, 11.5, 12),       # 2 red pullback, low 11.5
     (12, 13.8, 11.9, 13.2),     # 3 wick 13.8 > 13.5 → bullish swing (high 14, low 11.5). Doesn't reach 14.
 ]
-BOS_CANDLE = (13.2, 14.5, 13, 14.3)     # 4 wick 14.5 > 14 → BOS. Candle 3 is the OB (low 11.9).
+BOS_CANDLE = (13.2, 14.5, 13, 14.3)     # 4 wick 14.5 > 14 → BOS. The move started from the swing low 11.5.
 
 
 # --- starting the trend ----------------------------------------------------------
@@ -107,14 +110,14 @@ def test_first_swing_sets_the_starting_trend_without_a_break():
 
 def test_bullish_bos_when_a_wick_goes_above_the_last_swing_high():
     # Candle 4 wicks to 14.5, above the swing high 14 → BOS.
-    # The OB is candle 3 (the candle right before), so the CHoCH level moves up to candle 3's low (11.9).
+    # The move up started from the swing low 11.5 (candle 2) → that's the CHoCH level, NOT candle 3's low (11.9).
     structure, returned = run(candles(*FIRST_SWING, BOS_CANDLE))
     assert len(returned[4]) == 1
     b = returned[4][0]
     assert (b.kind, b.direction, b.level) == ("BOS", "bullish", 14)
-    assert b.time == hour(4) and b.ob_time == hour(3)
+    assert b.time == hour(4)
     assert structure.trend == "bullish"
-    assert structure.choch_level == 11.9
+    assert structure.choch_level == 11.5
 
 
 def test_a_lower_high_swing_does_not_move_the_bos_level():
@@ -134,7 +137,7 @@ def test_a_lower_high_swing_does_not_move_the_bos_level():
     assert len(returned[8]) == 1
     b = returned[8][0]
     assert (b.kind, b.direction, b.level) == ("BOS", "bullish", 14)
-    assert b.ob_time == hour(7)
+    assert structure.choch_level == 11.5        # lowest low since the 14 high was made
 
 
 def test_no_second_bos_until_a_new_swing_high_exists():
@@ -146,44 +149,50 @@ def test_no_second_bos_until_a_new_swing_high_exists():
 
 # --- CHoCH ----------------------------------------------------------------------------
 
-def test_dipping_below_the_pullback_but_above_the_ob_low_is_not_a_choch():
-    # After the BOS, price pulls back to 12.5, then dips to 12.0 — still above the OB low (11.9).
+def test_dipping_below_the_pullback_but_above_the_swing_low_is_not_a_choch():
+    # After the BOS, price pulls back to 12.5, then dips to 12.0 — still above the swing low (11.5).
     # Taking out the pullback (inducement) is just the sweep. No CHoCH.
     structure, _ = run(candles(*FIRST_SWING, BOS_CANDLE, (14.3, 14.4, 12.5, 12.6), (12.6, 12.7, 12.0, 12.1)))
     assert [b.kind for b in structure.breaks] == ["BOS"]
     assert structure.trend == "bullish"
 
 
-def test_bullish_to_bearish_choch_when_price_breaks_the_ob_low():
-    # Candle 6 wicks to 11.5, below the OB low 11.9 → CHoCH, trend now bearish.
-    # The candle before it (5) is the new OB, so the new CHoCH level is candle 5's HIGH (14.4).
-    structure, returned = run(candles(*FIRST_SWING, BOS_CANDLE, (14.3, 14.4, 12.5, 12.6), (12.6, 12.7, 11.5, 11.6)))
+def test_dipping_exactly_to_the_swing_low_is_not_a_choch():
+    # A wick to exactly 11.5 doesn't go BELOW the swing low → no CHoCH.
+    structure, _ = run(candles(*FIRST_SWING, BOS_CANDLE, (14.3, 14.4, 12.5, 12.6), (12.6, 12.7, 11.5, 11.6)))
+    assert [b.kind for b in structure.breaks] == ["BOS"]
+
+
+def test_bullish_to_bearish_choch_when_price_breaks_the_swing_low():
+    # Candle 6 wicks to 11.4, below the swing low 11.5 → CHoCH, trend now bearish.
+    # The drop started from the top of the leg, candle 4's high 14.5 → that's the new CHoCH level.
+    structure, returned = run(candles(*FIRST_SWING, BOS_CANDLE, (14.3, 14.4, 12.5, 12.6), (12.6, 12.7, 11.4, 11.6)))
     assert len(returned[6]) == 1
     b = returned[6][0]
-    assert (b.kind, b.direction, b.level) == ("CHoCH", "bearish", 11.9)
-    assert b.time == hour(6) and b.ob_time == hour(5)
+    assert (b.kind, b.direction, b.level) == ("CHoCH", "bearish", 11.5)
+    assert b.time == hour(6)
     assert structure.trend == "bearish"
-    assert structure.choch_level == 14.4
+    assert structure.choch_level == 14.5
     assert structure.bos_level is None
 
 
 def test_after_a_choch_the_next_bos_needs_a_swing_in_the_new_direction():
     # After the bearish CHoCH: green pullback (7), then candle 8 drops to 11.0.
-    # Candle 8 confirms a bearish swing (high 12.4, low 11.5) → bos_level = 11.5 —
-    # and the same candle's wick (11.0) already goes below it → bearish BOS on candle 8. OB = candle 7.
+    # Candle 8 confirms a bearish swing (high 12.4, low 11.4) → bos_level = 11.4 —
+    # and the same candle's wick (11.0) already goes below it → bearish BOS on candle 8.
+    # The drop started from the swing high 12.4 (candle 7) → new CHoCH level.
     structure, returned = run(candles(
         *FIRST_SWING, BOS_CANDLE,
         (14.3, 14.4, 12.5, 12.6),       # 5
-        (12.6, 12.7, 11.5, 11.6),       # 6 CHoCH
+        (12.6, 12.7, 11.4, 11.6),       # 6 CHoCH
         (11.6, 12.4, 11.7, 12.2),       # 7 green pullback
         (12.2, 12.3, 11.0, 11.1),       # 8 confirms bearish swing AND breaks its low
     ))
     assert returned[7] == []
     assert len(returned[8]) == 1
     b = returned[8][0]
-    assert (b.kind, b.direction, b.level) == ("BOS", "bearish", 11.5)
-    assert b.ob_time == hour(7)
-    assert structure.choch_level == 12.4       # high of the OB candle (7)
+    assert (b.kind, b.direction, b.level) == ("BOS", "bearish", 11.4)
+    assert structure.choch_level == 12.4       # the swing high (candle 7)
     assert [x.kind for x in structure.breaks] == ["BOS", "CHoCH", "BOS"]
 
 
@@ -200,18 +209,17 @@ BEAR_FIRST_SWING = [
 def test_bearish_mirror_start_bos_and_choch():
     structure, returned = run(candles(
         *BEAR_FIRST_SWING,
-        (6.4, 6.5, 5.5, 5.6),       # 4 wick 5.5 < 6 → bearish BOS, OB = candle 3 → choch_level = 8.2
-        (5.6, 7.0, 5.6, 6.9),       # 5 green, 7.0 < 8.2 → nothing
-        (6.9, 8.6, 6.8, 8.5),       # 6 wick 8.6 > 8.2 → CHoCH to bullish, OB = candle 5 → choch_level = 5.6
+        (6.4, 6.5, 5.5, 5.6),       # 4 wick 5.5 < 6 → bearish BOS → choch_level = swing high 8.5 (not candle 3's 8.2)
+        (5.6, 7.0, 5.6, 6.9),       # 5 green, 7.0 < 8.5 → nothing
+        (6.9, 8.6, 6.8, 8.5),       # 6 wick 8.6 > 8.5 → CHoCH to bullish → choch_level = bottom of the leg 5.5
     ))
     assert structure.breaks[0].kind == "BOS" and structure.breaks[0].direction == "bearish"
-    assert structure.breaks[0].level == 6 and structure.breaks[0].ob_time == hour(3)
+    assert structure.breaks[0].level == 6
     assert returned[5] == []
     b = returned[6][0]
-    assert (b.kind, b.direction, b.level) == ("CHoCH", "bullish", 8.2)
-    assert b.ob_time == hour(5)
+    assert (b.kind, b.direction, b.level) == ("CHoCH", "bullish", 8.5)
     assert structure.trend == "bullish"
-    assert structure.choch_level == 5.6
+    assert structure.choch_level == 5.5
 
 
 # --- real data sanity ---------------------------------------------------------------------
@@ -221,7 +229,7 @@ def test_real_eurusd_h4_structure_makes_sense():
     # On 7 years of real H4:
     #   - plenty of both BOS and CHoCH
     #   - a BOS never changes the trend; a CHoCH always flips it
-    #   - the OB candle is always before the break candle (no lookahead), and breaks come out in time order
+    #   - breaks come out in time order
     df = pd.read_parquet(DATA / "EURUSD_H4.parquet")
     structure = StructureDetector()
     trend_before = []
@@ -238,6 +246,5 @@ def test_real_eurusd_h4_structure_makes_sense():
             assert b.direction == before
         else:
             assert b.direction != before
-        assert b.ob_time < b.time
     times = [b.time for b in breaks]
     assert times == sorted(times)

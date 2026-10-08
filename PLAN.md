@@ -53,21 +53,22 @@ Rules are expected to get tweaked during Stage 2.
 - **Wick counts everywhere** (swing continuation, BOS, CHoCH, sweep): a wick through the level is enough, no close needed. (answered 2026-10-04)
 - **"Goes past the pullback" (default):** a wick above the pullback candle's high (bearish: below its low) — from the "green candle shoots past that red" example. ❓ confirm, or is it past the top of the move before the pullback?
 - **Pullback (default):** one or more opposite-colour candles (red in an up move, green in a down move). ❓ confirm, or does a same-colour candle making a lower low also count?
-- ❓ **OB candle colour:** must it be the opposite colour (bearish candle for a buy OB), or any candle before the BOS candle?
-- **OB zone (v1 default):** the OB candle's full range, wicks included. Tests: `tests/test_order_blocks.py`.
+- **OB zone:** body to wick — bullish: body top → candle low; bearish: body bottom → candle high. The far-side wick is ignored (a wick into it isn't a tap). (answered 2026-10-07) Tests: `tests/test_order_blocks.py`.
   OB status: pending → valid (pullback + continuation, inducement set) → swept → tapped; any time → invalid (wick through the far side of the OB).
   Also invalid: the pullback after the BOS already comes back into the OB before an inducement forms. Tap without a sweep doesn't count.
   Real EURUSD H4 (2019–2026): ~1186 OBs, ~207 reach tapped (~27 setups/yr on one TF).
 - ❓ **OB life:** dead after the first tap, or can it be used again? (v1: after the tap it only changes again if it breaks → invalid)
-- ❓ **Do CHoCH breaks create OBs too?** (v1: only BOS does — your 7-step pattern says BOS. The reversal OB after a CHoCH matters for the flip logic later.)
+- **OB candle:** the LAST opposite-colour candle before the break candle (bullish break → last red, bearish → last green), for BOS and CHoCH alike. (answered 2026-10-07)
+- **CHoCH creates OBs too:** same as BOS, then pullback → inducement → sweep → tap. (answered 2026-10-07)
 - ❓ **OB break by wick or close?** (v1: wick. A close-only break gave a few more setups on H4 — test it in the backtest.)
 - **BOS (trend continues):** bullish = the new swing's high goes above the previous swing's high. Bearish = the new swing's low goes below the previous swing's low.
   The level to break is set by the FIRST swing after the last break and stays until broken — a later lower high (bullish) / higher low (bearish) doesn't move it. (answered 2026-10-05)
 - **CHoCH (trend changes):** bullish trend, but price breaks a swing **low** instead → CHoCH (now bearish). Bearish trend, but price breaks a swing **high** → CHoCH (now bullish).
-- **CHoCH level = the low at the OB** (the low the move started from), NOT the inducement low. Bullish: price sweeping the inducement is just the sweep; price breaking below the OB low → CHoCH (bearish). Bearish: mirror (break above the OB high). (answered 2026-10-04)
+- **Levels come only from swing points (never candle colours):** bullish → BOS level = swing high, CHoCH level = the swing low the move started from (lowest low between the broken high and the BOS). Bearish: mirror. After a CHoCH the new CHoCH level = the swing high/low the reversal started from. Sweeping the inducement is NOT a CHoCH. (answered 2026-10-04, refined 2026-10-07)
+- **OB break ≠ CHoCH:** the OB (last opposite candle) can sit above the swing low, so price can break the OB (→ invalid) without a CHoCH.
 - **Swings/structure per TF:** each TF's swings, BOS, OBs come only from that TF's own candles (one H4 swing contains many M15 swings).
 - **When a higher-TF break is noticed:** v1 = (a) on that TF's candle close (e.g. H4 BOS seen when the H4 candle closes). Later idea: (b) check higher-TF levels against M15 wicks for faster reaction in volatile markets — make it a config switch and backtest both.
-- 🅿️ **Parked for v2 — breaker blocks & mitigation blocks** (failed OBs that flip role). Get the basic OB setup backtested first; define these after.
+- **Breaker & mitigation blocks** (answered 2026-10-07): an OB broken through its far side, followed by a CHoCH the other way on that TF, flips into a POI in the new direction (same zone). Breaker = price swept the high (bullish OB; bearish: low) above its break candle first; mitigation = it didn't. Needs its own inducement swept before the tap, like any OB. All TFs.
 - ❓ **Several pullbacks after the BOS:** if price pulls back twice before continuing, is the inducement the first pullback, or the one closest to the OB?
 - ❓ **FVGs:** used at all, or OB + inducement only?
 
@@ -86,7 +87,7 @@ smc-bot/
 │   ├── config.py           # pydantic Settings: .env credentials, SYMBOLS, TIMEFRAMES, paths → `settings`
 │   ├── mt5_client.py       # MT5 connection singleton (get_client()) + validation checks
 │   ├── candles.py          # which HTF bars are CLOSED as of time T (no lookahead)
-│   ├── detectors.py        # swings, BOS/CHoCH, sweeps, FVG, OB
+│   ├── detectors/          # enums, swings, structure (BOS/CHoCH), order_blocks — one file each
 │   ├── bias.py             # bias per TF (W1, H4, H1)
 │   ├── state_machine.py    # regime + setup logic (one instance per symbol)
 │   ├── features.py         # builds the feature row when a setup fires
@@ -151,6 +152,17 @@ Notes:
 11. Plot trades and check them by eye. Fix detectors until the bot sees what you see.
 
 **Checkpoint:** does raw SMC have an edge after costs? If not, fix the rules before touching ML.
+
+**Stage 2 status (2026-10-08):** steps 6-8 done (`core/candles.py`, `core/state_machine.py`), step 11 charts in
+`research/plot_trades.py` (M15 entry + HTF context, linked). Step 9 is still a throwaway sim (bid prices only,
+spread charged once) — build the real `research/backtest.py` next.
+- Per-symbol settings live in `core/symbols.py` (`machine_for("XAUUSD")`). Every idea is a StateMachine switch;
+  test ONE switch at a time against a known baseline — changing several at once hid which one hurt.
+- What works (2019-2026, first entries, after spread): M15 CHoCH → **wait for the M15 inducement** → limit; TP at the
+  **nearest opposing H1/H4 OB**; min RR 1.5 (BTC 1.0). EURUSD 68 trades +51.9R, XAUUSD (breakers on) 27 trades
+  +20.4R, BTCUSD 75 trades +22.8R → ~22 trades/yr, +95R, max DD ~-10R per symbol.
+- Didn't work: stop at the breaker candle (wicked out, 3-14% win), TP at H4 swings (~15% win), continuation entries.
+- Thin samples (gold ~3.5 trades/yr) → add symbols before trusting it; then ML filter (Stage 3).
 
 **Prop-firm check (later, only when a prop account is chosen):** a separate pass over the trade list/equity curve, not part of the strategy logic.
 - Copy the exact rules for the specific account from the firm's site into `core/config.py` (daily loss %, max drawdown %, static vs trailing, how daily loss is measured (balance or equity, at what server time), profit target, min days, news/weekend/lot rules).

@@ -17,7 +17,7 @@ COMMON = dict(entry_mode="inducement", target_mode="htf_ob")
 SYMBOL_SETTINGS : dict[str, dict] = {
     "EURUSD": dict(COMMON, point=0.00001, min_rr=1.5),                  # plain order blocks
     # gold respects breakers: any block (OB / breaker / mitigation) that gets its inducement first
-    "XAUUSD": dict(COMMON, point=0.01, min_rr=1.5, flip_blocks=True, single_use=True, early_taps=True,
+    "XAUUSD": dict(COMMON, point=0.01, min_rr=1.5, breakers_and_mitigation=True, single_use=True, early_taps=True,
                    entry_blocks="nearest"),
     "BTCUSD": dict(COMMON, point=0.001, min_rr=1.0),
 }

@@ -17,14 +17,14 @@ def test_everyone_waits_for_the_inducement_and_targets_the_htf_ob():
 def test_gold_trades_any_block_breakers_included():
     m = machine_for("XAUUSD")
     assert (m.entry_blocks, m.early_taps) == ("nearest", True)
-    assert all(d.flip_blocks and d.single_use for d in m.detectors.values())
+    assert all(d.breakers_and_mitigation and d.single_use for d in m.detectors.values())
     assert m.point == 0.01
 
 
 def test_eurusd_uses_plain_order_blocks():
     m = machine_for("EURUSD")
     assert (m.entry_blocks, m.early_taps) == ("choch", False)
-    assert all(not d.flip_blocks and not d.single_use for d in m.detectors.values())
+    assert all(not d.breakers_and_mitigation and not d.single_use for d in m.detectors.values())
 
 
 def test_min_rr_per_symbol():

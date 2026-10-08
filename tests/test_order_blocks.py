@@ -208,8 +208,8 @@ def test_sweep_and_tap_on_the_same_candle():
 
 # --- switches ---------------------------------------------------------------------------------------------
 
-def test_flip_blocks_off_means_no_breakers_or_mitigation():
-    detector = OrderBlockDetector(flip_blocks=False)
+def test_breakers_and_mitigation_off_means_no_breakers_or_mitigation():
+    detector = OrderBlockDetector(breakers_and_mitigation=False)
     for c in candles(*SETUP, CHOCH):
         detector.update(c)
     assert [ob.kind for ob in detector.order_blocks] == ["BOS", "CHoCH"]

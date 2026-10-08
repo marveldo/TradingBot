@@ -168,9 +168,9 @@ class OrderBlock:
 
 class OrderBlockDetector:
 
-    def __init__(self, flip_blocks : bool = True, single_use : bool = True):
-        """flip_blocks: broken OBs + a CHoCH → breaker / mitigation blocks. single_use: tapped zones become spent."""
-        self.flip_blocks = flip_blocks
+    def __init__(self, breakers_and_mitigation : bool = True, single_use : bool = True):
+        """breakers_and_mitigation: broken OBs + a CHoCH → breaker / mitigation blocks. single_use: tapped zones become spent."""
+        self.breakers_and_mitigation = breakers_and_mitigation
         self.single_use = single_use
         self.structure = StructureDetector()
         self.last_red : tuple | None = None      # last red candle BEFORE the current one
@@ -196,7 +196,7 @@ class OrderBlockDetector:
                 self.order_blocks.append(ob)
                 changed.append(ob)
             # a CHoCH flips the OBs that were broken on the way into it → breaker / mitigation blocks
-            if self.flip_blocks and brk.kind == BreakKind.CHOCH:
+            if self.breakers_and_mitigation and brk.kind == BreakKind.CHOCH:
                 for broken in self.broken_since_break:
                     if broken.direction != brk.direction:
                         flipped = self.flip(broken, brk, candle)

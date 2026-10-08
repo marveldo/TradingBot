@@ -50,7 +50,7 @@ DEFAULT_ENTRY_MODE = "immediate"
 SPREAD_CANDLES = 96             # spread space = average spread of the last day of entry-TF candles (96 x M15)
 # Defaults = the FIRST version (best so far: EURUSD ~25% win, +0.16R/trade). The later ideas stay available as
 # switches and each gets tested on its own against this baseline before it becomes a default.
-DEFAULT_FLIP_BLOCKS = False     # breaker / mitigation blocks as POIs and M15 entry blocks
+DEFAULT_BREAKERS_AND_MITIGATION = False     # breaker / mitigation blocks as POIs and M15 entry blocks
 DEFAULT_SINGLE_USE = False      # a tapped zone becomes spent once price leaves past its inducement
 DEFAULT_EARLY_TAPS = False      # see H1/H4 taps on M15 candles instead of at the H1/H4 close
 DEFAULT_MIN_RR = 0.0            # skip setups whose TP is less than this many times the SL distance (0 = off)
@@ -342,7 +342,7 @@ class StateMachine:
     def __init__(self, levels=DEFAULT_LEVELS, poi_tfs=DEFAULT_POI_TFS, entry_tf=DEFAULT_ENTRY_TF,
                  target_tf=DEFAULT_TARGET_TF, sl_buffer_atr=DEFAULT_SL_BUFFER_ATR, continuations=DEFAULT_CONTINUATIONS,
                  entry_mode=DEFAULT_ENTRY_MODE, point : float = 0.0, spread_mult : float = 1.0,
-                 target_mode=DEFAULT_TARGET_MODE, flip_blocks=DEFAULT_FLIP_BLOCKS, single_use=DEFAULT_SINGLE_USE,
+                 target_mode=DEFAULT_TARGET_MODE, breakers_and_mitigation=DEFAULT_BREAKERS_AND_MITIGATION, single_use=DEFAULT_SINGLE_USE,
                  early_taps=DEFAULT_EARLY_TAPS, entry_blocks=DEFAULT_ENTRY_BLOCKS,
                  target_ob_tfs=DEFAULT_TARGET_OB_TFS, min_rr=DEFAULT_MIN_RR):
         """point = the symbol's price step (MT5 symbol_info().point, e.g. 0.00001 EURUSD). Candle spreads are in
@@ -369,7 +369,7 @@ class StateMachine:
         self.true_ranges : deque[float] = deque(maxlen=ATR_PERIOD)
         self.prev_close : float | None = None
         tfs = {tf for pair in levels for tf in pair} | set(poi_tfs) | {entry_tf, target_tf} | set(target_ob_tfs)
-        self.detectors = {tf: OrderBlockDetector(flip_blocks=flip_blocks, single_use=single_use) for tf in tfs}
+        self.detectors = {tf: OrderBlockDetector(breakers_and_mitigation=breakers_and_mitigation, single_use=single_use) for tf in tfs}
         self.bias : SwingDirection | None = None
         self.used_pois : set[int] = set()
         self.active_pois : dict[str, list[OrderBlock]] = {tf: [] for tf in poi_tfs}   # tapped, not yet broken

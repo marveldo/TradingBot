@@ -492,13 +492,13 @@ def test_dead_obs_leave_the_live_list():
 def test_defaults_are_the_first_version():
     m = StateMachine()
     assert (m.target_mode, m.entry_blocks, m.early_taps, m.spread_space) == ("liquidity", "choch", False, 0.0)
-    assert all(not d.flip_blocks and not d.single_use for d in m.detectors.values())
+    assert all(not d.breakers_and_mitigation and not d.single_use for d in m.detectors.values())
 
 
 def test_switches_turn_the_later_ideas_on():
-    m = StateMachine(flip_blocks=True, single_use=True, early_taps=True, entry_blocks="nearest", target_mode="poi_swing")
+    m = StateMachine(breakers_and_mitigation=True, single_use=True, early_taps=True, entry_blocks="nearest", target_mode="poi_swing")
     assert (m.target_mode, m.entry_blocks, m.early_taps) == ("poi_swing", "nearest", True)
-    assert all(d.flip_blocks and d.single_use for d in m.detectors.values())
+    assert all(d.breakers_and_mitigation and d.single_use for d in m.detectors.values())
 
 
 def test_early_taps_off_ignores_m15_taps():

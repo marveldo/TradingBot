@@ -265,7 +265,7 @@ def test_uptrend_staircase_gives_two_bullish_swings():
 
 # --- real data sanity -------------------------------------------------------------------
 
-@pytest.mark.skipif(not (DATA / "EURUSD_H4.parquet").exists(), reason="no fetched data")
+@pytest.mark.skipif(not (DATA / "EURUSD" / "H4.parquet").exists(), reason="no fetched data")
 def test_real_eurusd_h4_swings_make_sense():
     # On real H4 data, every swing must obey basic logic:
     #   - high is above low
@@ -273,7 +273,7 @@ def test_real_eurusd_h4_swings_make_sense():
     #   - swings come out in time order
     #   - there are LOTS of both kinds (a real market pulls back all the time, ~7 years of H4 here)
     #   - the detector never gets stuck: no 2-month stretch without a bullish (or bearish) swing
-    df = pd.read_parquet(DATA / "EURUSD_H4.parquet")
+    df = pd.read_parquet(DATA / "EURUSD" / "H4.parquet")
     detector = SwingDetector()
     for row in df.itertuples(index=False):
         detector.update(row)

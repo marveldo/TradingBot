@@ -121,9 +121,9 @@ def test_two_h1_candles_closing_in_an_m15_hole_are_both_handed_out_in_order():
 
 # --- real data ------------------------------------------------------------------
 
-@pytest.mark.skipif(not (DATA / "EURUSD_M15.parquet").exists(), reason="no fetched data")
+@pytest.mark.skipif(not (DATA / "EURUSD" / "M15.parquet").exists(), reason="no fetched data")
 def test_real_eurusd_every_closed_candle_handed_out_once_and_never_early():
-    load = lambda tf: pd.read_parquet(DATA / f"EURUSD_{tf}.parquet")
+    load = lambda tf: pd.read_parquet(DATA / "EURUSD" / f"{tf}.parquet")
     m15, h1, h4, d1, w1 = load("M15"), load("H1"), load("H4"), load("D1"), load("W1")
     events = run(m15, h1=h1, h4=h4, d1=d1, w1=w1)
     last_now = events[-1][0]

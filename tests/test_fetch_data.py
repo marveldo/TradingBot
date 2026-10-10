@@ -77,6 +77,15 @@ def test_data_dir_is_inside_the_data_folder():
     assert fetch_module.data_dir == settings.BASE_DIR / "data" / settings.ACCOUNT_BROKER
 
 
+def test_candle_file_is_one_folder_per_symbol(out_dir):
+    assert fetch_module.candle_file("EURUSD", "H4") == out_dir / "EURUSD" / "H4.parquet"
+
+
+def saved_files(folder):
+    """Every parquet under `folder`, as 'SYMBOL/TF.parquet'."""
+    return sorted(p.relative_to(folder).as_posix() for p in folder.rglob("*.parquet"))
+
+
 # --- fetch_data (fake MT5) ----------------------------------------------------
 
 def test_fetch_data_saves_one_file_per_symbol_and_timeframe(out_dir, fake_client, monkeypatch):
@@ -85,8 +94,7 @@ def test_fetch_data_saves_one_file_per_symbol_and_timeframe(out_dir, fake_client
 
     fetch_data(SERVER)
 
-    saved = sorted(p.name for p in out_dir.iterdir())
-    assert saved == ["EURUSD_H4.parquet", "EURUSD_M15.parquet", "XAUUSD_H4.parquet", "XAUUSD_M15.parquet"]
+    assert saved_files(out_dir) == ["EURUSD/H4.parquet", "EURUSD/M15.parquet", "XAUUSD/H4.parquet", "XAUUSD/M15.parquet"]
     assert fake_client.calls == [("EURUSD", "TF_H4"), ("EURUSD", "TF_M15"), ("XAUUSD", "TF_H4"), ("XAUUSD", "TF_M15")]
     assert fake_client.disconnected
 
@@ -97,7 +105,7 @@ def test_fetch_data_saved_file_reads_back_the_same(out_dir, fake_client, monkeyp
 
     fetch_data(SERVER)
 
-    df = pd.read_parquet(out_dir / "EURUSD_H4.parquet")
+    df = pd.read_parquet(out_dir / "EURUSD" / "H4.parquet")
     pd.testing.assert_frame_equal(df, convert_to_dataframe(make_rates()), check_dtype=False)
 
 
@@ -110,7 +118,7 @@ def test_fetch_data_stops_when_a_pull_fails(out_dir, monkeypatch):
     with pytest.raises(Exception, match="Failed to copy rates for EURUSD"):
         fetch_data(SERVER)
 
-    assert sorted(p.name for p in out_dir.iterdir()) == ["EURUSD_H4.parquet"]
+    assert saved_files(out_dir) == ["EURUSD/H4.parquet"]
     assert client.disconnected
 
 
@@ -125,7 +133,7 @@ def test_live_fetch_data_writes_a_real_file(out_dir, monkeypatch):
 
     fetch_data(settings.ACCOUNT_SERVER)
 
-    df = pd.read_parquet(out_dir / "EURUSD_H4.parquet")
+    df = pd.read_parquet(out_dir / "EURUSD" / "H4.parquet")
     assert len(df) > 0
     assert str(df["time"].dt.tz) == "UTC"
     assert df["time"].min() >= pd.Timestamp("2026-09-01", tz="UTC")

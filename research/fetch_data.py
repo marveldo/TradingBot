@@ -3,6 +3,13 @@ from core.mt5_client import get_mt5_client
 from pathlib import Path
 
 data_dir = Path(f"{settings.BASE_DIR}/data/{settings.ACCOUNT_BROKER}")
+
+
+def candle_file(symbol: str, timeframe: str) -> Path:
+    """Where one symbol's candles for one timeframe live: data/<broker>/<SYMBOL>/<TF>.parquet"""
+    return data_dir / symbol / f"{timeframe}.parquet"
+
+
 def fetch_data(server: str) -> None:
 
     mt5_client = get_mt5_client(server)
@@ -18,8 +25,10 @@ def fetch_data(server: str) -> None:
                     settings.END_DATE
                 )
                 df = convert_to_dataframe(rates)
-                df.to_parquet(f"{data_dir}/{symbol}_{timeframe}.parquet", index=False)
-                print(f"Saved data for {symbol} {timeframe} to {data_dir}/{symbol}_{timeframe}.parquet")
+                path = candle_file(symbol, timeframe)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                df.to_parquet(path, index=False)
+                print(f"Saved data for {symbol} {timeframe} to {path}")
         print(f"Fetching data from MT5 server: {server}")
     finally:
         mt5_client.disconnect()

@@ -224,13 +224,13 @@ def test_bearish_mirror_start_bos_and_choch():
 
 # --- real data sanity ---------------------------------------------------------------------
 
-@pytest.mark.skipif(not (DATA / "EURUSD_H4.parquet").exists(), reason="no fetched data")
+@pytest.mark.skipif(not (DATA / "EURUSD" / "H4.parquet").exists(), reason="no fetched data")
 def test_real_eurusd_h4_structure_makes_sense():
     # On 7 years of real H4:
     #   - plenty of both BOS and CHoCH
     #   - a BOS never changes the trend; a CHoCH always flips it
     #   - breaks come out in time order
-    df = pd.read_parquet(DATA / "EURUSD_H4.parquet")
+    df = pd.read_parquet(DATA / "EURUSD" / "H4.parquet")
     structure = StructureDetector()
     trend_before = []
     for row in df.itertuples(index=False):

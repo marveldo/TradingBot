@@ -437,7 +437,7 @@ def test_bearish_mirror_of_the_whole_setup():
 
 # --- real data sanity ---------------------------------------------------------------------------------
 
-@pytest.mark.skipif(not (DATA / "EURUSD_H4.parquet").exists(), reason="no fetched data")
+@pytest.mark.skipif(not (DATA / "EURUSD" / "H4.parquet").exists(), reason="no fetched data")
 def test_real_eurusd_h4_order_blocks_make_sense():
     # On 7 years of real H4:
     #   - lots of OBs, and plenty get all the way to "tapped" (= a setup). Counted from what update() reports,
@@ -446,7 +446,7 @@ def test_real_eurusd_h4_order_blocks_make_sense():
     #   - every OB: low <= high (a doji with no wick on the far side can be a single price), OB candle before its break
     #   - every OB with an inducement: inducement formed after the BOS, on the right side of the OB
     #     (bullish: above the OB high, bearish: below the OB low)
-    df = pd.read_parquet(DATA / "EURUSD_H4.parquet")
+    df = pd.read_parquet(DATA / "EURUSD" / "H4.parquet")
     detector = OrderBlockDetector()
     ever_tapped = set()
     for row in df.itertuples(index=False):

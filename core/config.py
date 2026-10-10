@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     BASE_DIR: Path = BASE_DIR
     TIMEFRAMES: list[str] = ["W1","D1", "H4", "H1", "M15"]
-    SYMBOLS: list[str] = ["EURUSD", "XAUUSD", "BTCUSD"]
+    SYMBOLS: list[str] = ["EURUSD", "XAUUSD", "BTCUSD","GBPUSD", "USDJPY", "USDCAD"]
     START_DATE: datetime = datetime(2019,1,1 , tzinfo=timezone.utc)
     END_DATE: datetime = datetime.now(timezone.utc)
 

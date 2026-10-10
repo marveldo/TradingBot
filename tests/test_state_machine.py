@@ -566,9 +566,9 @@ def test_snapshot_shows_a_paused_level_and_its_opposing_ob():
 
 # --- the whole machine on real data -------------------------------------------------------------------
 
-@pytest.mark.skipif(not (DATA / "EURUSD_M15.parquet").exists(), reason="no fetched data")
+@pytest.mark.skipif(not (DATA / "EURUSD" / "M15.parquet").exists(), reason="no fetched data")
 def test_real_eurusd_setups_make_sense():
-    load = lambda tf: pd.read_parquet(DATA / f"EURUSD_{tf}.parquet")
+    load = lambda tf: pd.read_parquet(DATA / "EURUSD" / f"{tf}.parquet")
     machine = StateMachine(continuations=True)
     biases = []
     for now, candles in feed(load("M15"), load("H1"), load("H4"), load("D1"), load("W1")):

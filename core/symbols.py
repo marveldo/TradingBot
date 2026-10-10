@@ -12,14 +12,18 @@ from .state_machine import StateMachine
 # Earlier results (immediate entry, H1-swing TP) are in PLAN.md / git history.
 COMMON = dict(entry_mode="inducement", target_mode="htf_ob")
 
-# min_rr: skip setups whose TP is under min_rr x the SL distance. Picked from 2019-2026 (min_rr_check, 2026-10-08):
-#   EURUSD 1.5 → +51.9R (vs +41.7R with none), XAUUSD 1.5 → +20.4R, BTCUSD 1.0 → +22.8R (stricter hurt BTC).
 SYMBOL_SETTINGS : dict[str, dict] = {
     "EURUSD": dict(COMMON, point=0.00001, min_rr=1.5),                  # plain order blocks
-    # gold respects breakers: any block (OB / breaker / mitigation) that gets its inducement first
     "XAUUSD": dict(COMMON, point=0.01, min_rr=1.5, breakers_and_mitigation=True, single_use=True, early_taps=True,
                    entry_blocks="nearest"),
     "BTCUSD": dict(COMMON, point=0.001, min_rr=1.0),
+    "GBPUSD": dict(COMMON, point=0.00001 , min_rr=1.5, breakers_and_mitigation=True, single_use=True, early_taps=True,
+                   entry_blocks="nearest"),
+    "USDJPY": dict(COMMON ,point=0.001 , min_rr =1.5),
+
+    "USDCAD": dict(COMMON, point=0.00001, min_rr=1.0, breakers_and_mitigation=True, single_use=False,
+                   early_taps=True, entry_blocks="nearest")
+  
 }
 
 

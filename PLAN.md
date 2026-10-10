@@ -81,7 +81,7 @@ smc-bot/
 ├── management.py           # `python management.py <command>` — runs anything in commands/
 ├── commands/               # one file per command (help, add_arguments, handle); found via pkgutil
 │   └── fetch_data.py       # → research.fetch_data.fetch_data(server)
-├── data/<broker>/          # <SYMBOL>_<TF>.parquet + setups.parquet
+├── data/<broker>/<SYMBOL>/ # <TF>.parquet (M15, H1, H4, D1, W1); setups.parquet
 ├── notebooks/              # exploration: check detectors on charts, try features/models
 ├── core/                   # SHARED by research and live bot
 │   ├── config.py           # pydantic Settings: .env credentials, SYMBOLS, TIMEFRAMES, paths → `settings`
@@ -114,7 +114,7 @@ Current: Deriv demo (`Deriv-Demo`). Also Exness (demo + real). Later maybe a pro
 - The **MT5 server name** is the key (`Deriv-Demo`, ...). It's passed as `--server`; MT5 itself knows demo vs real.
 - `.env`: `ACCOUNT_LOGIN_ID`, `ACCOUNT_PASSWORD`, `ACCOUNT_SERVER`, `ACCOUNT_BROKER` → loaded by `core/config.py` (`from core.config import settings`).
 - `settings.SYMBOLS` is a plain list. If a broker renames symbols (Exness `EURUSDm`), edit the list or match via `symbol_info()`.
-- Data is stored per broker (demo + live share a feed): `data/<broker>/<SYMBOL>_<TF>.parquet`, so feeds never mix.
+- Data is stored per broker (demo + live share a feed): `data/<broker>/<SYMBOL>/<TF>.parquet`, so feeds never mix.
 - Re-backtest flow: switch account in `.env` → `python management.py fetch_data --server X` → backtest command (later).
 
 `core/mt5_client.py` (singleton, via `get_client()`):
@@ -136,7 +136,7 @@ Run: `python management.py fetch_data --server Deriv-Demo`. Last row of each fil
 2. First: pull EURUSD M15, print first/last timestamp + row count → how deep is the history?
 3. Pull **W1, H4, H1, M15** per symbol natively from MT5 (not resampled) so candles match the broker charts.
 4. Convert broker server time to UTC (find the broker's offset, incl. DST).
-5. Save to `data/<broker>/<SYMBOL>_<TF>.parquet` (needs `pyarrow`).
+5. Save to `data/<broker>/<SYMBOL>/<TF>.parquet` (needs `pyarrow`). Path comes from `candle_file()` in research/fetch_data.py.
 
 Notes:
 - Set MT5 *Tools → Options → Charts → Max bars in chart* to Unlimited, restart MT5.

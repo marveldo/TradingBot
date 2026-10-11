@@ -1,12 +1,11 @@
 from types import SimpleNamespace
 
-import MetaTrader5 as mt5
 import pandas as pd
 import pytest
 
 from core.detectors import OrderBlock
 from core.state_machine import Setup
-from live.bot import LIMIT_HOURS, lot_size, only_new, order_request, tp_reached
+from live.bot import LIMIT_HOURS, lot_size, only_new, order_prices, tp_reached
 
 T = pd.Timestamp("2026-01-05 12:00", tz="UTC")
 EURUSD = SimpleNamespace(trade_tick_size=0.00001, trade_tick_value=1.0, volume_step=0.01, volume_min=0.01,
@@ -34,16 +33,18 @@ def test_lot_size_is_capped_at_the_maximum():
     assert lot_size(EURUSD, 1.10255, 1.10254, 10_000_000.0) == 100.0
 
 
-def test_buy_setup_becomes_a_buy_limit_with_sl_tp_and_expiry():
-    request = order_request(setup(), "EURUSD", 0.62, 5)
-    assert request["type"] == mt5.ORDER_TYPE_BUY_LIMIT
-    assert (request["price"], request["sl"], request["tp"], request["volume"]) == (1.10255, 1.10095, 1.11, 0.62)
-    assert request["expiration"] == int((T + pd.Timedelta(hours=LIMIT_HOURS)).timestamp())
+def test_buy_setup_prices_and_expiry():
+    prices = order_prices(setup(), 5)
+    assert prices == dict(buy=True, price=1.10255, sl=1.10095, tp=1.11,
+                          expiration=int((T + pd.Timedelta(hours=LIMIT_HOURS)).timestamp()))
 
 
-def test_sell_setup_becomes_a_sell_limit():
-    request = order_request(setup("bearish", 1.1000, 1.1015, 1.0950), "EURUSD", 0.5, 5)
-    assert request["type"] == mt5.ORDER_TYPE_SELL_LIMIT
+def test_sell_setup_is_not_a_buy():
+    assert order_prices(setup("bearish", 1.1000, 1.1015, 1.0950), 5)["buy"] is False
+
+
+def test_prices_are_rounded_to_the_symbols_digits():
+    assert order_prices(setup(entry=1.102554999, sl=1.100951, tp=1.110004), 5)["price"] == 1.10255
 
 
 def test_only_new_keeps_bars_after_the_last_one_seen():

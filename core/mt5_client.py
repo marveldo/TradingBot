@@ -46,6 +46,57 @@ class MT5Client :
             raise Exception(f"No rates data available for {symbol} from {date_from} to {date_to}")
         return rates
 
+    def select_symbol(self, symbol: str) -> None:
+        if not mt5.symbol_select(symbol, True):
+            raise Exception(f"Failed to select {symbol} in Market Watch, Error code: {mt5.last_error()}")
+
+    def copy_rates_from_pos(self, symbol: str, timeframe_str: str, start: int, count: int):
+        rates = mt5.copy_rates_from_pos(symbol, self.get_mt5_timeframe(timeframe_str), start, count)
+        if rates is None or len(rates) == 0:
+            raise Exception(f"Failed to copy {timeframe_str} rates for {symbol}, Error code: {mt5.last_error()}")
+        return rates
+
+    def symbol_info(self, symbol: str):
+        info = mt5.symbol_info(symbol)
+        if info is None:
+            raise Exception(f"Failed to get symbol info for {symbol}, Error code: {mt5.last_error()}")
+        return info
+
+    def account_balance(self) -> float:
+        account = mt5.account_info()
+        if account is None:
+            raise Exception(f"Failed to get account info, Error code: {mt5.last_error()}")
+        return account.balance
+
+    def place_limit_order(self, symbol: str, buy: bool, volume: float, price: float, sl: float, tp: float,
+                          expiration: int, magic: int, comment: str) -> int:
+        request = dict(
+            action=mt5.TRADE_ACTION_PENDING,
+            symbol=symbol,
+            volume=volume,
+            type=mt5.ORDER_TYPE_BUY_LIMIT if buy else mt5.ORDER_TYPE_SELL_LIMIT,
+            price=price,
+            sl=sl,
+            tp=tp,
+            type_time=mt5.ORDER_TIME_SPECIFIED,
+            expiration=expiration,
+            type_filling=mt5.ORDER_FILLING_RETURN,
+            magic=magic,
+            comment=comment,
+        )
+        result = mt5.order_send(request)
+        if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+            raise Exception(f"Order rejected for {symbol}: {result}, Error code: {mt5.last_error()}")
+        return result.order
+
+    def is_order_pending(self, ticket: int) -> bool:
+        return bool(mt5.orders_get(ticket=ticket))
+
+    def cancel_order(self, ticket: int) -> None:
+        result = mt5.order_send(dict(action=mt5.TRADE_ACTION_REMOVE, order=ticket))
+        if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+            raise Exception(f"Failed to cancel order {ticket}: {result}, Error code: {mt5.last_error()}")
+
     def get_mt5_timeframe(self, timeframe_str: str) -> int:
         timeframe_attr = f"TIMEFRAME_{timeframe_str}"
         if not hasattr(mt5, timeframe_attr):

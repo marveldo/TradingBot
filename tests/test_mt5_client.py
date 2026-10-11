@@ -148,6 +148,85 @@ def test_get_mt5_client_raises_when_login_fails(monkeypatch):
     with pytest.raises(ConnectionError, match=SERVER):
         get_mt5_client(SERVER)
 
+# --- trading helpers used by the live bot -------------------------------------
+
+def trading_mt5(monkeypatch, retcode=10009, **funcs):
+    sent = []
+    fake = fake_mt5(monkeypatch, TRADE_ACTION_PENDING=5, TRADE_ACTION_REMOVE=8, ORDER_TYPE_BUY_LIMIT=2,
+                    ORDER_TYPE_SELL_LIMIT=3, ORDER_TIME_SPECIFIED=2, ORDER_FILLING_RETURN=2, TRADE_RETCODE_DONE=10009,
+                    order_send=lambda request: sent.append(request) or SimpleNamespace(retcode=retcode, order=777),
+                    **funcs)
+    return fake, sent
+
+
+def test_select_symbol_raises_when_mt5_refuses(monkeypatch):
+    fake_mt5(monkeypatch, symbol_select=lambda symbol, enable: False)
+    with pytest.raises(Exception, match="Failed to select GBPJPY"):
+        make_client().select_symbol("GBPJPY")
+
+
+def test_copy_rates_from_pos_passes_the_timeframe_and_returns_rates(monkeypatch):
+    calls = []
+    fake_mt5(monkeypatch, TIMEFRAME_H4=16388,
+             copy_rates_from_pos=lambda s, tf, start, count: calls.append((s, tf, start, count)) or np.array([1, 2]))
+    assert len(make_client().copy_rates_from_pos("EURUSD", "H4", 1, 2)) == 2
+    assert calls == [("EURUSD", 16388, 1, 2)]
+
+
+def test_copy_rates_from_pos_raises_when_empty(monkeypatch):
+    fake_mt5(monkeypatch, TIMEFRAME_H4=16388, copy_rates_from_pos=lambda *a: np.array([]))
+    with pytest.raises(Exception, match="Failed to copy H4 rates for EURUSD"):
+        make_client().copy_rates_from_pos("EURUSD", "H4", 1, 5)
+
+
+def test_symbol_info_and_balance_raise_when_missing(monkeypatch):
+    fake_mt5(monkeypatch, symbol_info=lambda s: None, account_info=lambda: None)
+    with pytest.raises(Exception, match="symbol info"):
+        make_client().symbol_info("EURUSD")
+    with pytest.raises(Exception, match="account info"):
+        make_client().account_balance()
+
+
+def test_account_balance(monkeypatch):
+    fake_mt5(monkeypatch, account_info=lambda: SimpleNamespace(balance=1000.0))
+    assert make_client().account_balance() == 1000.0
+
+
+def test_place_limit_order_sends_a_buy_limit_and_returns_the_ticket(monkeypatch):
+    fake, sent = trading_mt5(monkeypatch)
+    ticket = make_client().place_limit_order("EURUSD", buy=True, volume=0.5, price=1.1, sl=1.09, tp=1.12,
+                                             expiration=123, magic=1, comment="smc-bot")
+    assert ticket == 777
+    assert sent[0]["type"] == fake.ORDER_TYPE_BUY_LIMIT and sent[0]["action"] == fake.TRADE_ACTION_PENDING
+    assert (sent[0]["price"], sent[0]["sl"], sent[0]["tp"], sent[0]["volume"]) == (1.1, 1.09, 1.12, 0.5)
+
+
+def test_place_limit_order_sell(monkeypatch):
+    fake, sent = trading_mt5(monkeypatch)
+    make_client().place_limit_order("EURUSD", buy=False, volume=0.5, price=1.1, sl=1.11, tp=1.08,
+                                    expiration=123, magic=1, comment="smc-bot")
+    assert sent[0]["type"] == fake.ORDER_TYPE_SELL_LIMIT
+
+
+def test_place_limit_order_raises_when_rejected(monkeypatch):
+    trading_mt5(monkeypatch, retcode=10016)
+    with pytest.raises(Exception, match="Order rejected for EURUSD"):
+        make_client().place_limit_order("EURUSD", buy=True, volume=0.5, price=1.1, sl=1.09, tp=1.12,
+                                        expiration=123, magic=1, comment="smc-bot")
+
+
+def test_pending_order_check_and_cancel(monkeypatch):
+    fake, sent = trading_mt5(monkeypatch, orders_get=lambda ticket: [SimpleNamespace(ticket=ticket)])
+    client = make_client()
+    assert client.is_order_pending(777)
+    client.cancel_order(777)
+    assert sent == [dict(action=fake.TRADE_ACTION_REMOVE, order=777)]
+
+
+def test_no_pending_order(monkeypatch):
+    fake_mt5(monkeypatch, orders_get=lambda ticket: ())
+    assert not make_client().is_order_pending(777)
+
 
 # --- real terminal (pytest -m mt5) ----------------------------------------------
 

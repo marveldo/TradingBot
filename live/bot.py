@@ -3,7 +3,6 @@ import math
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-import MetaTrader5 as mt5
 import pandas as pd
 
 from core.candles import feed
@@ -21,10 +20,7 @@ log = logging.getLogger("live")
 
 
 def closed_bars(client, symbol, timeframe, count):
-    rates = mt5.copy_rates_from_pos(symbol, client.get_mt5_timeframe(timeframe), 1, count)
-    if rates is None or len(rates) == 0:
-        raise RuntimeError(f"no {timeframe} bars for {symbol}: {mt5.last_error()}")
-    return convert_to_dataframe(rates)
+    return convert_to_dataframe(client.copy_rates_from_pos(symbol, timeframe, 1, count))
 
 
 def replay(machine, bars):
@@ -35,7 +31,7 @@ def replay(machine, bars):
 
 
 def warm_up(client, symbol):
-    mt5.symbol_select(symbol, True)
+    client.select_symbol(symbol)
     bars = {tf: closed_bars(client, symbol, tf, count) for tf, count in WARMUP_BARS.items()}
     machine = machine_for(symbol)
     replay(machine, bars)
@@ -64,38 +60,27 @@ def lot_size(info, entry, sl, risk_money):
     return min(volume, info.volume_max)
 
 
-def order_request(setup, symbol, volume, digits):
-    buy = setup.direction == "bullish"
+def order_prices(setup, digits):
     expires = setup.time + pd.Timedelta(hours=LIMIT_HOURS)
-    return dict(
-        action=mt5.TRADE_ACTION_PENDING,
-        symbol=symbol,
-        volume=volume,
-        type=mt5.ORDER_TYPE_BUY_LIMIT if buy else mt5.ORDER_TYPE_SELL_LIMIT,
-        price=round(setup.entry, digits),
-        sl=round(setup.sl, digits),
-        tp=round(setup.tp, digits),
-        type_time=mt5.ORDER_TIME_SPECIFIED,
-        expiration=int(expires.timestamp()),
-        type_filling=mt5.ORDER_FILLING_RETURN,
-        magic=MAGIC,
-        comment="smc-bot",
-    )
+    return dict(buy=setup.direction == "bullish", price=round(setup.entry, digits), sl=round(setup.sl, digits),
+                tp=round(setup.tp, digits), expiration=int(expires.timestamp()))
 
 
-def place_order(setup, symbol, risk_percent):
-    info = mt5.symbol_info(symbol)
-    risk_money = mt5.account_info().balance * risk_percent / 100
+def place_order(client, setup, symbol, risk_percent):
+    info = client.symbol_info(symbol)
+    risk_money = client.account_balance() * risk_percent / 100
     volume = lot_size(info, setup.entry, setup.sl, risk_money)
     if volume == 0:
-        log.warning(f"{symbol}: risk {risk_money:.2f} is below the minimum lot, skipped")
+        log.warning(f"risk {risk_money:.2f} is below the minimum lot, skipped")
         return None
-    result = mt5.order_send(order_request(setup, symbol, volume, info.digits))
-    if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
-        log.error(f"{symbol}: order rejected {result} {mt5.last_error()}")
+    try:
+        ticket = client.place_limit_order(symbol, volume=volume, magic=MAGIC, comment="smc-bot",
+                                          **order_prices(setup, info.digits))
+    except Exception as error:
+        log.error(str(error))
         return None
-    log.info(f"{symbol}: order {result.order} placed, {volume} lots")
-    return result.order
+    log.info(f"order {ticket} placed, {volume} lots")
+    return ticket
 
 
 def tp_reached(setup, candle):
@@ -104,14 +89,14 @@ def tp_reached(setup, candle):
     return candle.low <= setup.tp
 
 
-def cancel_missed_orders(waiting, symbol, m15):
+def cancel_missed_orders(client, waiting, m15):
     for ticket, setup in list(waiting.items()):
-        if not mt5.orders_get(ticket=ticket):
+        if not client.is_order_pending(ticket):
             del waiting[ticket]
             continue
         if any(tp_reached(setup, candle) for candle in m15.itertuples(index=False)):
-            mt5.order_send(dict(action=mt5.TRADE_ACTION_REMOVE, order=ticket))
-            log.info(f"{symbol}: order {ticket} cancelled, TP reached before the fill")
+            client.cancel_order(ticket)
+            log.info(f"order {ticket} cancelled, TP reached before the fill")
             del waiting[ticket]
 
 
@@ -136,11 +121,11 @@ def run_symbol(symbol, trade=False, risk_percent=0.5, server=None):
     while True:
         bars = new_bars(client, symbol, last_seen)
         if len(bars["M15"]):
-            cancel_missed_orders(waiting, symbol, bars["M15"])
+            cancel_missed_orders(client, waiting, bars["M15"])
             for setup in replay(machine, bars):
                 log.info(f"SETUP {describe(symbol, setup)}")
                 if trade:
-                    ticket = place_order(setup, symbol, risk_percent)
+                    ticket = place_order(client, setup, symbol, risk_percent)
                     if ticket:
                         waiting[ticket] = setup
         time.sleep(CHECK_EVERY_SECONDS)

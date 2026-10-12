@@ -30,13 +30,24 @@ def replay(machine, bars):
     return setups
 
 
+def still_open(setup, m15):
+    now = m15.time.iloc[-1] + pd.Timedelta(minutes=15)
+    if now >= setup.time + pd.Timedelta(hours=LIMIT_HOURS):
+        return False
+    later = m15[m15.time >= setup.time]
+    if setup.direction == "bullish":
+        return not (later.low <= setup.entry).any() and not (later.high >= setup.tp).any()
+    return not (later.high >= setup.entry).any() and not (later.low <= setup.tp).any()
+
+
 def warm_up(client, symbol):
     client.select_symbol(symbol)
     bars = {tf: closed_bars(client, symbol, tf, count) for tf, count in WARMUP_BARS.items()}
     machine = machine_for(symbol)
-    replay(machine, bars)
+    setups = replay(machine, bars)
     last_seen = {tf: df.time.iloc[-1] for tf, df in bars.items()}
-    return machine, last_seen
+    open_setups = [setup for setup in setups if still_open(setup, bars["M15"])]
+    return machine, last_seen, open_setups
 
 
 def only_new(df, last_time):
@@ -110,24 +121,30 @@ def setup_logging(symbol):
                         handlers=[logging.StreamHandler(), logging.FileHandler(f"logs/live_{symbol}.log")])
 
 
+def handle_setup(client, symbol, setup, trade, risk_percent, waiting, label="SETUP"):
+    log.info(f"{label} {describe(symbol, setup)}")
+    if trade:
+        ticket = place_order(client, setup, symbol, risk_percent)
+        if ticket:
+            waiting[ticket] = setup
+
+
 def run_symbol(symbol, trade=False, risk_percent=0.5, server=None):
     setup_logging(symbol)
     client = get_mt5_client(server or settings.ACCOUNT_SERVER)
     log.info(f"{'TRADING' if trade else 'DRY RUN'}, risk {risk_percent}% per trade, warming up")
-    machine, last_seen = warm_up(client, symbol)
-    log.info(f"ready, bias {machine.bias}")
+    machine, last_seen, open_setups = warm_up(client, symbol)
+    log.info(f"ready, bias {machine.bias}, {len(open_setups)} setup(s) from the warm-up still open")
     waiting = {}
+    for setup in open_setups:
+        handle_setup(client, symbol, setup, trade, risk_percent, waiting, label="STILL OPEN")
 
     while True:
         bars = new_bars(client, symbol, last_seen)
         if len(bars["M15"]):
             cancel_missed_orders(client, waiting, bars["M15"])
             for setup in replay(machine, bars):
-                log.info(f"SETUP {describe(symbol, setup)}")
-                if trade:
-                    ticket = place_order(client, setup, symbol, risk_percent)
-                    if ticket:
-                        waiting[ticket] = setup
+                handle_setup(client, symbol, setup, trade, risk_percent, waiting)
         time.sleep(CHECK_EVERY_SECONDS)
 
 

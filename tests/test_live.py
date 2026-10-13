@@ -142,3 +142,27 @@ def test_check_safely_logs_and_reconnects_instead_of_crashing(monkeypatch):
     monkeypatch.setattr(bot, "reconnect", lambda client, symbol: reconnected.append(symbol))
     bot.check_safely(None, "EURUSD", None, {}, {}, False, 0.5)
     assert reconnected == ["EURUSD"]
+
+
+def test_history_retries_until_mt5_has_downloaded_it(monkeypatch):
+    answers = [Exception("Terminal: Call failed"), Exception("Terminal: Call failed"), "bars"]
+
+    def flaky(client, symbol, timeframe, count):
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(bot, "closed_bars", flaky)
+    monkeypatch.setattr(bot, "RETRY_SECONDS", 0)
+    assert bot.history(None, "BTCUSD", "W1", 400) == "bars"
+
+
+def test_history_gives_up_after_the_last_attempt(monkeypatch):
+    def broken(client, symbol, timeframe, count):
+        raise Exception("Terminal: Call failed")
+
+    monkeypatch.setattr(bot, "closed_bars", broken)
+    monkeypatch.setattr(bot, "RETRY_SECONDS", 0)
+    with pytest.raises(Exception, match="Call failed"):
+        bot.history(None, "BTCUSD", "W1", 400, attempts=3)

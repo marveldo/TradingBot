@@ -15,6 +15,7 @@ WARMUP_BARS = {"M15": 25000, "H1": 8000, "H4": 3000, "D1": 2000, "W1": 400}
 LIMIT_HOURS = 48
 MAGIC = 20261010
 CHECK_EVERY_SECONDS = 10
+RETRY_SECONDS = 10
 
 
 
@@ -39,9 +40,20 @@ def still_open(setup, m15):
     return not (later.high >= setup.entry).any() and not (later.low <= setup.tp).any()
 
 
+def history(client, symbol, timeframe, count, attempts=5):
+    for attempt in range(attempts):
+        try:
+            return closed_bars(client, symbol, timeframe, count)
+        except Exception as error:
+            if attempt == attempts - 1:
+                raise
+            logger(symbol).warning(f"{timeframe} history not ready ({error}), retrying")
+            time.sleep(RETRY_SECONDS)
+
+
 def warm_up(client, symbol):
     client.select_symbol(symbol)
-    bars = {tf: closed_bars(client, symbol, tf, count) for tf, count in WARMUP_BARS.items()}
+    bars = {tf: history(client, symbol, tf, count) for tf, count in WARMUP_BARS.items()}
     machine = machine_for(symbol)
     setups = replay(machine, bars)
     last_seen = {tf: df.time.iloc[-1] for tf, df in bars.items()}

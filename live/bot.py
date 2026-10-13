@@ -75,7 +75,11 @@ def bars_since(client, symbol, timeframe, last_time):
 
 
 def new_bars(client, symbol, last_seen):
-    return {tf: bars_since(client, symbol, tf, last_seen[tf]) for tf in WARMUP_BARS}
+    m15 = bars_since(client, symbol, "M15", last_seen["M15"])
+    if len(m15) == 0:
+        return {"M15": m15}
+    higher = {tf: bars_since(client, symbol, tf, last_seen[tf]) for tf in WARMUP_BARS if tf != "M15"}
+    return {"M15": m15, **higher}
 
 
 def mark_seen(last_seen, bars):

@@ -166,3 +166,27 @@ def test_history_gives_up_after_the_last_attempt(monkeypatch):
     monkeypatch.setattr(bot, "RETRY_SECONDS", 0)
     with pytest.raises(Exception, match="Call failed"):
         bot.history(None, "BTCUSD", "W1", 400, attempts=3)
+
+
+def test_only_m15_is_fetched_while_nothing_new_has_closed(monkeypatch):
+    asked = []
+
+    def nothing_new(client, symbol, timeframe, last_time):
+        asked.append(timeframe)
+        return m15_bars(0)
+
+    monkeypatch.setattr(bot, "bars_since", nothing_new)
+    bars = bot.new_bars(None, "EURUSD", {tf: T for tf in bot.WARMUP_BARS})
+    assert asked == ["M15"] and len(bars["M15"]) == 0
+
+
+def test_every_timeframe_is_fetched_once_a_new_m15_bar_closes(monkeypatch):
+    asked = []
+
+    def one_new(client, symbol, timeframe, last_time):
+        asked.append(timeframe)
+        return m15_bars(1)
+
+    monkeypatch.setattr(bot, "bars_since", one_new)
+    bars = bot.new_bars(None, "EURUSD", {tf: T for tf in bot.WARMUP_BARS})
+    assert sorted(asked) == sorted(bot.WARMUP_BARS) and set(bars) == set(bot.WARMUP_BARS)

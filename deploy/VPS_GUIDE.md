@@ -308,6 +308,25 @@ After the reboot, check with the commands in **Is the bot running?**. Then free 
 sudo systemctl disable --now xrdp
 ```
 
+### 9. Keep the free VM from looking idle
+Oracle may reclaim an Always Free VM if, over 7 days, its CPU 95th percentile stays under 20% (and network under 20%).
+The bot sits at ~4–8% CPU, so a cron job keeps the CPU busy for 6 minutes every hour (10% of the time), at the lowest
+priority so the bot and MT5 always come first, starting at :02 to stay clear of the M15 closes.
+
+Install it once (running it twice adds a duplicate line):
+```bash
+(crontab -l 2>/dev/null; echo "2 * * * * nice -n 19 timeout 360 sh -c 'while :; do :; done'") | crontab -
+crontab -l
+```
+Check it runs (after :02 past the hour, and over a day):
+```bash
+journalctl -u cron --since "1 hour ago" --no-pager | grep CMD
+journalctl -u cron --since "24 hours ago" --no-pager | grep -c CMD
+```
+After a week: Oracle console → the instance → Metrics → CPU Utilization, Statistic **P95**, 7 days: should be above 20%.
+
+Remove it after upgrading to Pay As You Go (that account type is not reclaimed): `crontab -r`.
+
 ---
 
 ## Troubleshooting

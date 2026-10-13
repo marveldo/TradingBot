@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     ACCOUNT_PASSWORD: str
     ACCOUNT_SERVER: str
     ACCOUNT_BROKER: str
+    MT5_HOST: str = "localhost"
+    MT5_PORT: int = 18812
 
     BASE_DIR: Path = BASE_DIR
     TIMEFRAMES: list[str] = ["W1","D1", "H4", "H1", "M15"]

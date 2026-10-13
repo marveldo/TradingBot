@@ -8,7 +8,13 @@ The full plan, rules and findings are in [PLAN.md](PLAN.md).
 
 ## Setup
 
-Windows only (the `MetaTrader5` package needs the MT5 terminal installed, open and logged in).
+The MT5 terminal must be installed, open and logged in.
+
+- **Windows:** uses the official `MetaTrader5` package.
+- **Linux (VPS):** MT5 runs under Wine, and the bot talks to it through
+  [`mt5server.exe`](https://github.com/lucas-campagna/mt5linux/releases) (from the mt5linux project, a Windows Python
+  with `MetaTrader5` bundled). Start it with `wine mt5server.exe` (add `-p <port>` for another port), then run the
+  bot with Linux Python. Set `MT5_HOST` / `MT5_PORT` in `.env` if the server isn't on `localhost:18812`.
 
 ```powershell
 python -m venv .venv

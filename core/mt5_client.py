@@ -1,5 +1,17 @@
-import MetaTrader5 as mt5
+import sys
+
 from .config import settings
+
+
+def load_mt5(platform: str = sys.platform):
+    if platform == "win32":
+        import MetaTrader5
+        return MetaTrader5
+    from .mt5_remote import RemoteMT5
+    return RemoteMT5(settings.MT5_HOST, settings.MT5_PORT)
+
+
+mt5 = load_mt5()
 
 
 
@@ -88,6 +100,12 @@ class MT5Client :
         if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
             raise Exception(f"Order rejected for {symbol}: {result}, Error code: {mt5.last_error()}")
         return result.order
+
+    def pending_orders(self, symbol: str, magic: int) -> list:
+        orders = mt5.orders_get(symbol=symbol)
+        if orders is None and mt5.last_error()[0] != mt5.RES_S_OK:
+            raise Exception(f"Failed to get pending orders for {symbol}, Error code: {mt5.last_error()}")
+        return [order for order in orders or () if order.magic == magic]
 
     def is_order_pending(self, ticket: int) -> bool:
         return bool(mt5.orders_get(ticket=ticket))

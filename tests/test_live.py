@@ -5,7 +5,8 @@ import pytest
 
 from core.detectors import OrderBlock
 from core.state_machine import Setup
-from live.bot import LIMIT_HOURS, lot_size, only_new, order_prices, still_open, tp_reached
+from live import bot
+from live.bot import LIMIT_HOURS, bars_since, existing_ticket, lot_size, only_new, order_prices, still_open, tp_reached
 
 T = pd.Timestamp("2026-01-05 12:00", tz="UTC")
 EURUSD = SimpleNamespace(trade_tick_size=0.00001, trade_tick_value=1.0, volume_step=0.01, volume_min=0.01,
@@ -85,3 +86,59 @@ def test_warm_up_setup_older_than_the_limit_is_not_placed():
 def test_sell_warm_up_setup_still_open():
     assert still_open(setup("bearish", 1.1000, 1.1015, 1.0950), m15_after_setup((1.0960, 1.0990)))
     assert not still_open(setup("bearish", 1.1000, 1.1015, 1.0950), m15_after_setup((1.0960, 1.1001)))
+
+
+def order(ticket, price, sl, tp):
+    return SimpleNamespace(ticket=ticket, price_open=price, sl=sl, tp=tp)
+
+
+def test_existing_order_for_the_same_setup_is_adopted():
+    orders = [order(1, 1.1000, 1.0950, 1.1100), order(2, 1.10255, 1.10095, 1.11)]
+    assert existing_ticket(orders, setup(), 5) == 2
+
+
+def test_no_existing_order_for_a_different_setup():
+    assert existing_ticket([order(1, 1.10255, 1.10095, 1.12)], setup(), 5) is None
+
+
+def m15_bars(count):
+    return pd.DataFrame({"time": [T + pd.Timedelta(minutes=15 * i) for i in range(count)]})
+
+
+def test_bars_since_fetches_more_after_a_gap(monkeypatch):
+    history = m15_bars(100)
+    monkeypatch.setattr(bot, "closed_bars", lambda client, symbol, tf, count: history.tail(count))
+    missed = bars_since(None, "EURUSD", "M15", history.time.iloc[59])
+    assert list(missed.time) == list(history.time.iloc[60:])
+
+
+def test_bars_since_with_no_gap_returns_only_the_new_bars(monkeypatch):
+    history = m15_bars(100)
+    monkeypatch.setattr(bot, "closed_bars", lambda client, symbol, tf, count: history.tail(count))
+    assert list(bars_since(None, "EURUSD", "M15", history.time.iloc[97]).time) == list(history.time.iloc[98:])
+
+
+def test_a_failed_check_does_not_skip_bars(monkeypatch):
+    last_seen = {tf: T for tf in bot.WARMUP_BARS}
+    new = {tf: m15_bars(3) for tf in bot.WARMUP_BARS}
+    monkeypatch.setattr(bot, "new_bars", lambda client, symbol, seen: new)
+
+    def disconnected(*args):
+        raise ConnectionError("terminal gone")
+
+    monkeypatch.setattr(bot, "cancel_missed_orders", disconnected)
+    with pytest.raises(ConnectionError):
+        bot.check(None, "EURUSD", None, last_seen, {}, False, 0.5)
+    assert last_seen == {tf: T for tf in bot.WARMUP_BARS}
+
+
+def test_check_safely_logs_and_reconnects_instead_of_crashing(monkeypatch):
+    reconnected = []
+
+    def disconnected(*args):
+        raise ConnectionError("terminal gone")
+
+    monkeypatch.setattr(bot, "check", disconnected)
+    monkeypatch.setattr(bot, "reconnect", lambda client, symbol: reconnected.append(symbol))
+    bot.check_safely(None, "EURUSD", None, {}, {}, False, 0.5)
+    assert reconnected == ["EURUSD"]

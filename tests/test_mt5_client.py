@@ -252,3 +252,28 @@ def test_live_pulls_eurusd_h4(live_client):
 def test_live_unknown_symbol_raises(live_client):
     with pytest.raises(Exception, match="Failed to copy rates for EURUSDX"):
         live_client.copy_rates_range("EURUSDX", client_module.mt5.TIMEFRAME_H4, utc(2026, 9, 1), utc(2026, 9, 8))
+
+# --- choosing the MT5 package per OS ------------------------------------------
+
+def test_load_mt5_on_windows_is_the_official_package():
+    module = client_module.load_mt5("win32")
+    assert module.__name__ == "MetaTrader5" and hasattr(module, "TIMEFRAME_H4")
+
+
+def test_load_mt5_on_linux_connects_to_the_wine_server(monkeypatch):
+    import core.mt5_remote as remote_module
+    monkeypatch.setattr(remote_module, "RemoteMT5", lambda host, port: SimpleNamespace(host=host, port=port))
+    bridge = client_module.load_mt5("linux")
+    assert (bridge.host, bridge.port) == (settings.MT5_HOST, settings.MT5_PORT)
+
+
+def test_pending_orders_keeps_only_the_bots_magic(monkeypatch):
+    orders = (SimpleNamespace(ticket=1, magic=7), SimpleNamespace(ticket=2, magic=99))
+    fake_mt5(monkeypatch, orders_get=lambda symbol: orders, RES_S_OK=1)
+    assert [o.ticket for o in make_client().pending_orders("EURUSD", 7)] == [1]
+
+
+def test_pending_orders_raises_on_a_real_error(monkeypatch):
+    fake_mt5(monkeypatch, orders_get=lambda symbol: None, RES_S_OK=1)
+    with pytest.raises(Exception):
+        make_client().pending_orders("EURUSD", 7)

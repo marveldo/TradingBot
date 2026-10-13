@@ -126,6 +126,15 @@ df -h /        # disk Use% under ~80%
 uptime         # load average under ~1.0 once warmed up
 ```
 
+Memory per service (note the numbers, compare a week later):
+```bash
+systemctl status smc-bot mt5 mt5server --no-pager | grep -E "●|Memory"
+```
+The bot grows slowly by design: each symbol's state machine keeps every order block, break and swing it has seen,
+about 6.5 MB per symbol per year of candles (~40 MB a year for six symbols). A restart drops back to the warm-up size.
+If `mt5` or `mt5server` keeps climbing week after week, restart them on a weekend:
+`sudo systemctl restart mt5` (restarts the bridge and the bot with it).
+
 Errors from the other services:
 ```bash
 journalctl -u mt5server -n 30 --no-pager

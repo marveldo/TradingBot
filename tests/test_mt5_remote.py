@@ -61,3 +61,7 @@ def test_rates_arrive_as_a_local_numpy_array(remote):
 def test_order_requests_are_sent_as_real_dicts(remote):
     result = remote.order_send({"symbol": "EURUSD", "price": 1.1})
     assert (result.retcode, result.order, result.request.symbol) == (10009, 42, "EURUSD")
+
+
+def test_slow_calls_get_five_minutes(remote):
+    assert remote.connection._config["sync_request_timeout"] == 300

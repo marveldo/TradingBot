@@ -27,8 +27,9 @@ def local(value):
 
 class RemoteMT5:
 
-    def __init__(self, host: str, port: int):
+    def __init__(self, host: str, port: int, timeout_seconds: int = 300):
         self.connection = rpyc.classic.connect(host, port)
+        self.connection._config["sync_request_timeout"] = timeout_seconds
         self.connection.execute(SERVER_SETUP)
 
     def call(self, name: str, *args, **kwargs):

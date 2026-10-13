@@ -313,6 +313,9 @@ Oracle may reclaim an Always Free VM if, over 7 days, its CPU 95th percentile st
 The bot sits at ~4–8% CPU, so a cron job keeps the CPU busy for 6 minutes every hour (10% of the time), at the lowest
 priority so the bot and MT5 always come first, starting at :02 to stay clear of the M15 closes.
 
+When it runs: every hour from **:02 to :08**, 24 times a day (00:02–00:08, 01:02–01:08, … 23:02–23:08). The VPS
+clock is UTC; Nigeria is UTC+1, so the hour differs by one but the minutes are the same.
+
 Install it once (running it twice adds a duplicate line):
 ```bash
 (crontab -l 2>/dev/null; echo "2 * * * * nice -n 19 timeout 360 sh -c 'while :; do :; done'") | crontab -

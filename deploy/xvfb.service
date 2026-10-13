@@ -1,0 +1,12 @@
+[Unit]
+Description=Invisible screen for MT5
+After=network.target
+
+[Service]
+User=ubuntu
+ExecStart=/usr/bin/Xvfb :99 -screen 0 1280x800x16 -nolisten tcp
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

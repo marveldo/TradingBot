@@ -1,0 +1,17 @@
+[Unit]
+Description=Bridge between the bot and MT5 (mt5server.exe)
+Requires=mt5.service
+After=mt5.service
+
+[Service]
+User=ubuntu
+Environment=DISPLAY=:99
+Environment=WINEPREFIX=/home/ubuntu/.wine
+Environment=WINEDEBUG=-all
+ExecStartPre=/bin/sleep 20
+ExecStart=/usr/bin/wine /home/ubuntu/mt5server.exe
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

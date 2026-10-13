@@ -1,0 +1,17 @@
+[Unit]
+Description=SMC trading bot
+Requires=mt5server.service
+After=mt5server.service
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/smc-bot
+EnvironmentFile=/home/ubuntu/smc-bot/deploy/bot.env
+Environment=PYTHONUNBUFFERED=1
+ExecStartPre=/bin/sleep 15
+ExecStart=/home/ubuntu/smc-bot/.venv/bin/python management.py tradeprod $BOT_ARGS
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

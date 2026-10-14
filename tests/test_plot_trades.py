@@ -3,7 +3,7 @@ import pandas as pd
 
 from core.detectors import OrderBlock
 from core.state_machine import Setup
-from research.plot_trades import money_line, plot_context, plot_setup
+from research.plot_trades import money_line, plot_context, plot_now, plot_setup
 
 T = pd.Timestamp("2026-01-05 12:00", tz="UTC")
 
@@ -150,3 +150,32 @@ def test_context_chart_only_shows_candles_closed_before_the_setup():
 def test_entry_chart_links_to_its_context_chart():
     fig = plot_setup(make_setup(), m15_bars(), context_link="01_context.html")
     assert any('href="01_context.html"' in a.text for a in fig.layout.annotations)
+
+
+def test_now_chart_draws_without_a_setup():
+    ctx = dict(bias="bearish", levels=[dict(htf="h4", ltf="h1", state="AT_OPPOSING_OB", bias_in="bearish",
+                                            bias_out=None, opposing_ob=dict(direction="bullish", kind="BOS", low=1.10,
+                                                                            high=1.102, time=T - pd.Timedelta(days=2),
+                                                                            status="tapped"))],
+               structure={"h4": dict(trend="bearish", bos_level=1.099, choch_level=1.106)}, pois={})
+    data = {tf: pd.DataFrame({"time": pd.date_range(T - pd.Timedelta(weeks=60), T, freq=f), "open": 1.103,
+                              "high": 1.104, "low": 1.102, "close": 1.1035})
+            for tf, f in (("w1", "7D"), ("d1", "1D"), ("h4", "4h"), ("h1", "1h"))}
+    fig = plot_now(ctx, data, T, symbol="XAUUSD")
+    labels = [a.text for a in fig.layout.annotations]
+    assert "XAUUSD bot view at 2026-01-05 12:00 UTC" in fig.layout.title.text
+    assert "opposing bullish BOS OB" in labels and "CHoCH level" in labels
+    assert any("PAUSED at an opposing OB" in t for t in labels)
+
+
+def test_now_chart_draws_each_zone_once_as_a_block_on_its_own_timeframe():
+    zone = dict(direction="bullish", kind="BOS", low=1.100, high=1.102, time=T - pd.Timedelta(days=20), status="valid")
+    ctx = dict(bias="bullish", levels=[], structure={}, pois={"d1": [zone], "h4": [], "h1": []})
+    data = {tf: pd.DataFrame({"time": pd.date_range(T - pd.Timedelta(weeks=60), T, freq=f), "open": 1.103,
+                              "high": 1.104, "low": 1.102, "close": 1.1035})
+            for tf, f in (("w1", "7D"), ("d1", "1D"), ("h4", "4h"), ("h1", "1h"))}
+    fig = plot_now(ctx, data, T)
+    labels = [a.text for a in fig.layout.annotations]
+    assert labels.count("D1 bullish BOS (valid)") == 1                 # not repeated on the H4 / H1 panels
+    blocks = [s for s in fig.layout.shapes if s.type == "rect"]
+    assert len(blocks) == 1 and blocks[0].fillcolor != "rgba(0,0,0,0)"

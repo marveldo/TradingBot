@@ -113,6 +113,24 @@ EURUSD M15 2026-10-13 21:00 closed at 1.11991 | bias None | 1 new bar(s) | 0 ord
 ```
 Gold (XAUUSD) has a daily break and the weekend has no forex candles, so missing heartbeats then are normal.
 
+Can the bot place trades? MT5's **Algo Trading** button must be on, or every order is rejected (retcode 10027):
+```bash
+cd ~/smc-bot && source .venv/bin/activate
+python - <<'PY'
+from core.mt5_client import mt5, get_mt5_client
+from core.config import settings
+get_mt5_client(settings.ACCOUNT_SERVER)
+print("terminal algo trading:", mt5.terminal_info().trade_allowed,
+      "| account allowed:", mt5.account_info().trade_allowed, mt5.account_info().trade_expert)
+PY
+```
+All three should print `True`. If the first is `False`, turn Algo Trading on (see **Using MT5 by hand**).
+
+Orders the bot placed or had rejected:
+```bash
+grep -hE "placed|rejected" ~/smc-bot/logs/live_*.log | tail
+```
+
 Setups, orders and errors only:
 ```bash
 grep -hE "SETUP|STILL OPEN|ADOPTED|placed|cancelled|error|failed" ~/smc-bot/logs/live_*.log | tail -30
@@ -277,6 +295,8 @@ The first start compiles MQL5 samples for 5–15 minutes and the screen may look
 - Tools → Options → Charts → **Max bars in chart: 50000**.
 - Close all charts. Market Watch → Hide all, then add the six symbols.
 - Tools → Options → Server → untick **Enable news**.
+- Click **Algo Trading** in the toolbar so it turns green. A new install starts with it off, and then every order
+  the bot sends is rejected.
 - File → Exit.
 
 ### 6. The bridge
@@ -341,6 +361,7 @@ Remove it after upgrading to Pay As You Go (that account type is not reclaimed):
 | `history not ready ... retrying` | MT5 is still downloading history; the warm-up retries 5 times. |
 | `check failed: ...` on every check | The bridge restarted under the bot: `sudo systemctl restart mt5server`. |
 | `TimeoutError: result expired` | MT5 too slow to answer (first history download); the client waits 5 minutes. Run again. |
+| `terminal algo trading: False`, or `Order rejected` with retcode 10027 | Algo Trading is off: stop the services, open MT5 by hand, click **Algo Trading** (green), **File → Exit**, start the services. |
 | Remote Desktop "could not be authenticated" | Reset with `sudo passwd ubuntu`. |
 | Remote Desktop "X server could not be started" | `sudo apt install -y xorgxrdp && sudo systemctl restart xrdp`. |
 | Remote Desktop black screen | The VM is busy (MT5 first start); wait, or `sudo systemctl restart xrdp` and reconnect. |

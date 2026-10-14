@@ -51,9 +51,13 @@ def history(client, symbol, timeframe, count, attempts=5):
             time.sleep(RETRY_SECONDS)
 
 
-def warm_up(client, symbol):
+def load_history(client, symbol):
     client.select_symbol(symbol)
-    bars = {tf: history(client, symbol, tf, count) for tf, count in WARMUP_BARS.items()}
+    return {tf: history(client, symbol, tf, count) for tf, count in WARMUP_BARS.items()}
+
+
+def warm_up(client, symbol):
+    bars = load_history(client, symbol)
     machine = machine_for(symbol)
     setups = replay(machine, bars)
     last_seen = {tf: df.time.iloc[-1] for tf, df in bars.items()}

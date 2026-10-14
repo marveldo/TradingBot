@@ -33,6 +33,10 @@ class RemoteMT5:
         self.connection.execute(SERVER_SETUP)
 
     def call(self, name: str, *args, **kwargs):
+        # The MetaTrader5 build behind mt5server.exe rejects a positional request dict
+        # (order_send, order_check) with "Unnamed arguments not allowed"; it wants the fields as keywords.
+        if len(args) == 1 and isinstance(args[0], dict) and not kwargs:
+            args, kwargs = (), args[0]
         code = f"pickle.dumps(plain(mt5.{name}(*{args!r}, **{kwargs!r})))"
         return local(pickle.loads(self.connection.eval(code)))
 

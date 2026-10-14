@@ -24,7 +24,8 @@ def fake_metatrader5():
     module.copy_rates_from_pos = lambda symbol, timeframe, start, count: np.array(
         [(1_700_000_000 + i, 1.1, 1.2, 1.0, 1.15) for i in range(count)],
         dtype=[("time", "<i8"), ("open", "<f8"), ("high", "<f8"), ("low", "<f8"), ("close", "<f8")])
-    module.order_send = lambda request: OrderSendResult(10009, 42, TradeRequest(request["symbol"], request["price"]))
+    # keyword-only, like the MetaTrader5 build behind mt5server.exe
+    module.order_send = lambda **request: OrderSendResult(10009, 42, TradeRequest(request["symbol"], request["price"]))
     return module
 
 

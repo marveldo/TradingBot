@@ -80,6 +80,15 @@ class MT5Client :
             raise Exception(f"Failed to get account info, Error code: {mt5.last_error()}")
         return account.balance
 
+    def filling_type(self, symbol: str) -> int:
+        """The order filling the broker allows for this symbol (Deriv only allows FOK)."""
+        allowed = self.symbol_info(symbol).filling_mode
+        if allowed & mt5.SYMBOL_FILLING_FOK:
+            return mt5.ORDER_FILLING_FOK
+        if allowed & mt5.SYMBOL_FILLING_IOC:
+            return mt5.ORDER_FILLING_IOC
+        return mt5.ORDER_FILLING_RETURN
+
     def place_limit_order(self, symbol: str, buy: bool, volume: float, price: float, sl: float, tp: float,
                           expiration: int, magic: int, comment: str) -> int:
         request = dict(
@@ -92,7 +101,7 @@ class MT5Client :
             tp=tp,
             type_time=mt5.ORDER_TIME_SPECIFIED,
             expiration=expiration,
-            type_filling=mt5.ORDER_FILLING_RETURN,
+            type_filling=self.filling_type(symbol),
             magic=magic,
             comment=comment,
         )

@@ -277,3 +277,26 @@ def test_pending_orders_raises_on_a_real_error(monkeypatch):
     fake_mt5(monkeypatch, orders_get=lambda symbol: None, RES_S_OK=1)
     with pytest.raises(Exception):
         make_client().pending_orders("EURUSD", 7)
+
+
+# --- filling_type -------------------------------------------------------------
+
+FILLING = dict(SYMBOL_FILLING_FOK=1, SYMBOL_FILLING_IOC=2, ORDER_FILLING_FOK=0, ORDER_FILLING_IOC=1,
+               ORDER_FILLING_RETURN=2)
+
+
+@pytest.mark.parametrize("allowed, expected", [(1, 0), (2, 1), (3, 0), (0, 2)])
+def test_filling_type_follows_what_the_symbol_allows(monkeypatch, allowed, expected):
+    fake_mt5(monkeypatch, symbol_info=lambda symbol: SimpleNamespace(filling_mode=allowed), **FILLING)
+    assert make_client().filling_type("EURUSD") == expected
+
+
+def test_limit_order_uses_the_symbols_filling(monkeypatch):
+    sent = {}
+    fake_mt5(monkeypatch, symbol_info=lambda symbol: SimpleNamespace(filling_mode=1),
+             order_send=lambda request: sent.update(request) or SimpleNamespace(retcode=10009, order=7),
+             TRADE_ACTION_PENDING=5, ORDER_TYPE_BUY_LIMIT=2, ORDER_TYPE_SELL_LIMIT=3, ORDER_TIME_SPECIFIED=2,
+             TRADE_RETCODE_DONE=10009, **FILLING)
+    ticket = make_client().place_limit_order("EURUSD", buy=True, volume=0.01, price=1.1, sl=1.09, tp=1.12,
+                                             expiration=0, magic=1, comment="t")
+    assert (ticket, sent["type_filling"]) == (7, 0)

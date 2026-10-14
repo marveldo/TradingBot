@@ -13,6 +13,10 @@ def load_mt5(platform: str = sys.platform):
 
 mt5 = load_mt5()
 
+# Bits of symbol_info().filling_mode; the MetaTrader5 package has no constants for them
+SYMBOL_FILLING_FOK = 1
+SYMBOL_FILLING_IOC = 2
+
 
 
 class MT5Client :
@@ -83,9 +87,9 @@ class MT5Client :
     def filling_type(self, symbol: str) -> int:
         """The order filling the broker allows for this symbol (Deriv only allows FOK)."""
         allowed = self.symbol_info(symbol).filling_mode
-        if allowed & mt5.SYMBOL_FILLING_FOK:
+        if allowed & SYMBOL_FILLING_FOK:
             return mt5.ORDER_FILLING_FOK
-        if allowed & mt5.SYMBOL_FILLING_IOC:
+        if allowed & SYMBOL_FILLING_IOC:
             return mt5.ORDER_FILLING_IOC
         return mt5.ORDER_FILLING_RETURN
 

@@ -1,3 +1,4 @@
+import sys
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -150,10 +151,15 @@ def test_get_mt5_client_raises_when_login_fails(monkeypatch):
 
 # --- trading helpers used by the live bot -------------------------------------
 
-def trading_mt5(monkeypatch, retcode=10009, **funcs):
+FILLING = dict(SYMBOL_FILLING_FOK=1, SYMBOL_FILLING_IOC=2, ORDER_FILLING_FOK=0, ORDER_FILLING_IOC=1,
+               ORDER_FILLING_RETURN=2)
+
+
+def trading_mt5(monkeypatch, retcode=10009, filling_mode=1, **funcs):
     sent = []
     fake = fake_mt5(monkeypatch, TRADE_ACTION_PENDING=5, TRADE_ACTION_REMOVE=8, ORDER_TYPE_BUY_LIMIT=2,
-                    ORDER_TYPE_SELL_LIMIT=3, ORDER_TIME_SPECIFIED=2, ORDER_FILLING_RETURN=2, TRADE_RETCODE_DONE=10009,
+                    ORDER_TYPE_SELL_LIMIT=3, ORDER_TIME_SPECIFIED=2, TRADE_RETCODE_DONE=10009, **FILLING,
+                    symbol_info=lambda symbol: SimpleNamespace(filling_mode=filling_mode),
                     order_send=lambda request: sent.append(request) or SimpleNamespace(retcode=retcode, order=777),
                     **funcs)
     return fake, sent
@@ -255,6 +261,7 @@ def test_live_unknown_symbol_raises(live_client):
 
 # --- choosing the MT5 package per OS ------------------------------------------
 
+@pytest.mark.skipif(sys.platform != "win32", reason="MetaTrader5 only installs on Windows")
 def test_load_mt5_on_windows_is_the_official_package():
     module = client_module.load_mt5("win32")
     assert module.__name__ == "MetaTrader5" and hasattr(module, "TIMEFRAME_H4")
@@ -281,9 +288,6 @@ def test_pending_orders_raises_on_a_real_error(monkeypatch):
 
 # --- filling_type -------------------------------------------------------------
 
-FILLING = dict(SYMBOL_FILLING_FOK=1, SYMBOL_FILLING_IOC=2, ORDER_FILLING_FOK=0, ORDER_FILLING_IOC=1,
-               ORDER_FILLING_RETURN=2)
-
 
 @pytest.mark.parametrize("allowed, expected", [(1, 0), (2, 1), (3, 0), (0, 2)])
 def test_filling_type_follows_what_the_symbol_allows(monkeypatch, allowed, expected):
@@ -292,11 +296,7 @@ def test_filling_type_follows_what_the_symbol_allows(monkeypatch, allowed, expec
 
 
 def test_limit_order_uses_the_symbols_filling(monkeypatch):
-    sent = {}
-    fake_mt5(monkeypatch, symbol_info=lambda symbol: SimpleNamespace(filling_mode=1),
-             order_send=lambda request: sent.update(request) or SimpleNamespace(retcode=10009, order=7),
-             TRADE_ACTION_PENDING=5, ORDER_TYPE_BUY_LIMIT=2, ORDER_TYPE_SELL_LIMIT=3, ORDER_TIME_SPECIFIED=2,
-             TRADE_RETCODE_DONE=10009, **FILLING)
-    ticket = make_client().place_limit_order("EURUSD", buy=True, volume=0.01, price=1.1, sl=1.09, tp=1.12,
-                                             expiration=0, magic=1, comment="t")
-    assert (ticket, sent["type_filling"]) == (7, 0)
+    fake, sent = trading_mt5(monkeypatch, filling_mode=2)
+    make_client().place_limit_order("EURUSD", buy=True, volume=0.01, price=1.1, sl=1.09, tp=1.12,
+                                    expiration=0, magic=1, comment="t")
+    assert sent[0]["type_filling"] == fake.ORDER_FILLING_IOC

@@ -1,5 +1,6 @@
 import sys
 import threading
+import time
 from collections import namedtuple
 from types import ModuleType
 
@@ -34,6 +35,10 @@ def remote(monkeypatch):
     monkeypatch.setitem(sys.modules, "MetaTrader5", fake_metatrader5())
     server = ThreadedServer(SlaveService, hostname="localhost", port=0, protocol_config={"allow_all_attrs": True})
     threading.Thread(target=server.start, daemon=True).start()
+    # start() only begins listening once the thread runs; connecting earlier is refused
+    deadline = time.monotonic() + 5
+    while not server.active and time.monotonic() < deadline:
+        time.sleep(0.01)
     client = RemoteMT5("localhost", server.port)
     yield client
     client.connection.close()

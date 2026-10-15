@@ -10,12 +10,17 @@ this file because the repo is public.
 ```
 Oracle VM (Ubuntu 26.04, VM.Standard.E2.1.Micro, London, Always Free)
 ├── xvfb.service       invisible screen :99, so MT5 runs without a desktop
-├── mt5.service        MT5 terminal under Wine 10, logged in to the account (saved password)
-├── mt5server.service  mt5server.exe under Wine, the bridge between the bot and MT5 (port 18812, localhost only)
+├── mt5server.service  mt5server.exe under Wine 10, the bridge between the bot and MT5 (port 18812, localhost only).
+│                      It also runs the MT5 terminal (terminal64.exe /portable, logged in with a saved password):
+│                      the bot's first mt5.initialize() starts it inside the bridge's Wine session.
 └── smc-bot.service    python management.py tradeprod $BOT_ARGS (options in deploy/bot.env)
 ```
 
-All four start at boot in that order and restart themselves if they crash. Nobody needs to be logged in.
+All three start at boot in that order and restart themselves if they crash. Nobody needs to be logged in.
+
+There is deliberately no separate `mt5.service`. It used to start its own terminal, but systemd gave it a different
+Wine session from the bridge, so the bridge never saw it and started a second terminal anyway. The unused one cost
+~60% CPU. `deploy/install.sh` removes it from older installs.
 
 ---
 
@@ -66,7 +71,7 @@ tail -f ~/smc-bot/logs/live_*.log
 
 Follow the bot, MT5, the bridge and the screen together (useful when something won't start):
 ```bash
-journalctl -u xvfb -u mt5 -u mt5server -u smc-bot -f
+journalctl -u xvfb -u mt5server -u smc-bot -f
 ```
 
 Everything the bot printed since the last boot, or in a time window:
@@ -92,9 +97,9 @@ journalctl -u smc-bot -n 50 --no-pager
 ## Is the bot running?
 
 ```bash
-systemctl status xvfb mt5 mt5server smc-bot --no-pager | grep -E "●|Active"
+systemctl status xvfb mt5server smc-bot --no-pager | grep -E "●|Active"
 ```
-All four should say **active (running)**.
+All three should say **active (running)**.
 
 Watch the bot live (Ctrl+C stops watching, the bot keeps running):
 ```bash
@@ -146,17 +151,17 @@ uptime         # load average under ~1.0 once warmed up
 
 Memory per service (note the numbers, compare a week later):
 ```bash
-systemctl status smc-bot mt5 mt5server --no-pager | grep -E "●|Memory"
+systemctl status smc-bot mt5server --no-pager | grep -E "●|Memory|CPU"
+ps aux --sort=-%cpu | head -6     # exactly one terminal64.exe should be listed
 ```
 The bot grows slowly by design: each symbol's state machine keeps every order block, break and swing it has seen,
 about 6.5 MB per symbol per year of candles (~40 MB a year for six symbols). A restart drops back to the warm-up size.
-If `mt5` or `mt5server` keeps climbing week after week, restart them on a weekend:
-`sudo systemctl restart mt5` (restarts the bridge and the bot with it).
+If `mt5server` (the bridge plus MT5) keeps climbing week after week, restart it on a weekend:
+`sudo systemctl restart mt5server` (restarts the bot with it).
 
 Errors from the other services:
 ```bash
 journalctl -u mt5server -n 30 --no-pager
-journalctl -u mt5 -n 30 --no-pager
 journalctl -u xvfb -n 30 --no-pager
 ```
 
@@ -167,10 +172,10 @@ journalctl -u xvfb -n 30 --no-pager
 | Task | Command |
 |---|---|
 | Stop the bot | `sudo systemctl stop smc-bot` |
-| Start the bot (starts MT5 and the bridge too) | `sudo systemctl start smc-bot` |
+| Start the bot (starts the bridge and MT5 too) | `sudo systemctl start smc-bot` |
 | Restart the bot | `sudo systemctl restart smc-bot` |
 | Restart the bridge (and the bot with it) | `sudo systemctl restart mt5server` |
-| Stop everything | `sudo systemctl stop smc-bot mt5server mt5 xvfb` |
+| Stop everything | `sudo systemctl stop smc-bot mt5server xvfb` |
 | Reboot the VPS | `sudo reboot` (everything comes back by itself in ~3–10 min) |
 
 ### Change the bot's options
@@ -208,12 +213,12 @@ stop the services, run MT5 in the desktop, then hand it back.
 
 1. In SSH, stop the services:
    ```bash
-   sudo systemctl stop smc-bot mt5server mt5
+   sudo systemctl stop smc-bot mt5server
    ```
 2. Connect with Remote Desktop (see above) and open **Applications → Terminal Emulator**.
-3. Start MT5:
+3. Start MT5 with `/portable`, the same mode the bridge starts it in, so you change the settings the bot uses:
    ```bash
-   wine "$HOME/.wine/drive_c/Program Files/MetaTrader 5/terminal64.exe" &
+   wine "$HOME/.wine/drive_c/Program Files/MetaTrader 5/terminal64.exe" /portable &
    ```
 4. Optional, to run the bot by hand: start the bridge in a tmux window and detach with **Ctrl+B then D**:
    ```bash
@@ -357,6 +362,8 @@ Remove it after upgrading to Pay As You Go (that account type is not reclaimed):
 | Symptom | Cause and fix |
 |---|---|
 | `Connection refused` once in `journalctl -u smc-bot` after boot | The bridge was still starting; systemd retries the bot after 30 s. Only a problem if it repeats. |
+| `Failed to initialize MT5` once after boot | The bot's first call started MT5, which took longer than the library waits. systemd retries in 30 s and the next try finds it running. |
+| Two `terminal64.exe` in `ps aux` | A leftover `mt5.service` from an older install: `bash ~/smc-bot/deploy/install.sh` removes it. |
 | `Connection refused` over and over | `sudo systemctl restart mt5server`, then `ss -ltnp \| grep 18812` should show a line. |
 | `history not ready ... retrying` | MT5 is still downloading history; the warm-up retries 5 times. |
 | `check failed: ...` on every check | The bridge restarted under the bot: `sudo systemctl restart mt5server`. |

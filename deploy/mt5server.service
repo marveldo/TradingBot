@@ -1,7 +1,8 @@
 [Unit]
-Description=Bridge between the bot and MT5 (mt5server.exe)
-Requires=mt5.service
-After=mt5.service
+Description=Bridge between the bot and MT5 (mt5server.exe); it starts the MT5 terminal itself
+Requires=xvfb.service
+After=xvfb.service network-online.target
+Wants=network-online.target
 
 [Service]
 User=ubuntu
